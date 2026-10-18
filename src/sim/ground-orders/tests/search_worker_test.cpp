@@ -135,9 +135,184 @@ ScheduledRoute route_at_credit(int32_t tick_credit) {
     } while (!scheduler.controller.idle() && context.result.scans < 1000);
     return context.result;
 }
+
+/// Hashes fields explicitly so padding and pointer values never enter the result.
+struct SearchStateDigest {
+    uint64_t value{14695981039346656037ull};
+
+    /// Adds a value in little-endian byte order.
+    void add(uint64_t field) {
+        for (unsigned byte = 0; byte < 8; ++byte) {
+            value ^= (field >> (byte * 8)) & 0xffu;
+            value *= 1099511628211ull;
+        }
+    }
+
+    /// Adds the complete observable worker state, including unused heap slots.
+    void add(const SearchWorker& worker) {
+        add(worker.order_flags());
+        add(static_cast<uint32_t>(worker.fan()));
+        add(static_cast<uint32_t>(worker.threshold()));
+        add(static_cast<uint32_t>(worker.budget()));
+        for (const auto coordinate : worker.start_cell())
+            add(static_cast<uint16_t>(coordinate));
+        for (const auto coordinate : worker.finish_cell())
+            add(static_cast<uint16_t>(coordinate));
+        for (const auto coordinate : worker.nearest_goal())
+            add(static_cast<uint32_t>(coordinate));
+        add(worker.width());
+        add(worker.height());
+        for (uint32_t z = 0; z < worker.height(); ++z) {
+            for (uint32_t x = 0; x < worker.width(); ++x) {
+                const auto cell = worker.cell(x, z);
+                add(cell.flags);
+                add(cell.predecessor);
+                add(cell.handle);
+            }
+        }
+        const auto& heap = worker.heap();
+        add(heap.size());
+        add(heap.capacity());
+        add(heap.allocated_slots());
+        add(static_cast<uint32_t>(heap.free_head()));
+        add(heap.deferred_pop());
+        for (const auto handle : heap.heap_order())
+            add(handle);
+        for (uint32_t handle = 0; handle < heap.allocated_slots(); ++handle) {
+            const auto position = heap.position(handle);
+            add(position == SearchHeap::no_position ? uint64_t(-1) : uint64_t(position));
+            for (const auto word : heap.payload(handle))
+                add(word);
+        }
+        add(worker.route().size());
+        for (const auto& point : worker.route())
+            for (const auto coordinate : point)
+                add(static_cast<uint32_t>(coordinate));
+    }
+};
+
+/// Pins expansions, heap ties and sliced routes across changing search inputs.
+void check_expansion_states() {
+    constexpr std::array<int16_t, 8> parent_runs{-32768, -1, 0, 1, 4, 5, 100, 32767};
+    constexpr std::array<int32_t, 5> fans{0, 1, 2, 4, -1};
+    constexpr std::array<GoalShape, 3> shapes{
+        GoalShape::circle, GoalShape::ring, GoalShape::outline
+    };
+    SearchStateDigest digest;
+    uint32_t random = 0x19d47ac3u;
+    auto draw = [&] {
+        random = random * 1664525u + 1013904223u;
+        return random;
+    };
+    uint32_t started = 0;
+    uint32_t published = 0;
+    oa::sim::unit_spawn::LegacyWorld world(2);
+    auto& unit = world.unit(1);
+    Navigation navigation;
+    SearchWorker worker;
+    for (uint32_t episode = 0; episode < 384; ++episode) {
+        GridSampler sampler;
+        sampler.width = 12 + episode % 15;
+        sampler.height = 12 + (episode / 3) % 15;
+        sampler.cells.resize(sampler.width * sampler.height);
+        for (auto& cell : sampler.cells) {
+            const auto bits = draw();
+            cell = episode % 6 == 0 ? 3 : static_cast<uint8_t>((bits >> 28) % 4);
+        }
+        const auto footprint_x = static_cast<int16_t>(1 + episode % 8);
+        const auto footprint_z = static_cast<int16_t>(1 + (episode / 8) % 8);
+        MovementMap map(sampler.width, sampler.height, footprint_x, footprint_z, sampler);
+        fill(map);
+        std::vector<uint16_t> sight(32 * 32);
+        for (auto& bits : sight)
+            bits = episode % 4 == 0 ? 0xffff : static_cast<uint16_t>(draw() >> 16);
+        oa::sim::simulation_state::Order order;
+        Goal goal;
+        goal.order = &order;
+        goal.cell = {
+            static_cast<int16_t>(sampler.width - 2), static_cast<int16_t>(sampler.height - 2)
+        };
+        goal.shape = shapes[episode % shapes.size()];
+        goal.tolerance = static_cast<int32_t>((episode / 3) % 3) * 16;
+        goal.radius_squared = (goal.tolerance / 16) * (goal.tolerance / 16);
+        if (goal.shape == GoalShape::ring) {
+            goal.tolerance = 32;
+            goal.inner_range = 16;
+            goal.radius_squared = 4;
+            goal.inner_radius_squared = 1;
+        }
+        goal.left = goal.cell[0] - 2;
+        goal.right = goal.cell[0];
+        goal.top = goal.cell[1] - 2;
+        goal.bottom = goal.cell[1];
+        CHECK(goal_cost(goal, goal.cell[0] + 10, goal.cell[1] + 10) > 0);
+        if (goal.shape == GoalShape::circle) {
+            CHECK(goal_contains(goal, goal.cell[0], goal.cell[1]));
+        } else if (goal.shape == GoalShape::ring) {
+            CHECK(!goal_contains(goal, goal.cell[0], goal.cell[1]));
+            CHECK(goal_contains(goal, goal.cell[0], goal.cell[1] + 1));
+        } else {
+            CHECK(goal_contains(goal, goal.left, goal.top));
+            CHECK(!goal_contains(goal, goal.left + 1, goal.top + 1));
+        }
+        place(unit, static_cast<int16_t>(episode % 3), static_cast<int16_t>((episode / 3) % 3));
+        unit.record.heading = static_cast<uint16_t>(episode * 7919);
+        SearchBegin begin;
+        begin.current_tick = 100 + episode;
+        begin.mask_bit = static_cast<uint8_t>(episode * 13);
+        begin.heuristic_scale = (1 + static_cast<int32_t>(episode % 3)) * 0x10000;
+        begin.world_width = episode % 7 == 0 ? sampler.width - 2 : sampler.width;
+        begin.world_height = episode % 11 == 0 ? sampler.height - 2 : sampler.height;
+        auto result = worker.begin(make_record(unit, navigation, goal, map), begin, sight);
+        uint32_t marked_goals = 0;
+        for_each_goal_cell(goal, [&](int32_t x, int32_t z) {
+            CHECK((worker.cell(x, z).flags & search_goal_bit) != 0);
+            ++marked_goals;
+        });
+        CHECK(marked_goals == (goal.shape == GoalShape::outline ? 8u : 1u));
+        digest.add(static_cast<uint8_t>(result));
+        digest.add(order.raised_events);
+        digest.add(worker);
+        if (result != SearchAdvance::in_progress)
+            continue;
+        ++started;
+        for (uint32_t step = 0; step < 48 && !worker.exhausted(); ++step) {
+            if (episode % 3 == 0) {
+                result = worker.advance_slice();
+            } else {
+                // Keep the score unchanged while exercising signed run wrapping
+                // and the early-turn boundary on each selected parent.
+                auto& heap = const_cast<SearchHeap&>(worker.heap());
+                (void)heap.peek();
+                auto& parent = heap.payload(heap.heap_order().front());
+                const auto run = parent_runs[(episode + step) % parent_runs.size()];
+                parent[3] = (parent[3] & 0xffffu) |
+                            (static_cast<uint32_t>(static_cast<uint16_t>(run)) << 16);
+                worker.set_fan(fans[(episode + step / 8) % fans.size()]);
+                if (worker.expand_best() != 0) {
+                    worker.publish_route();
+                    result = SearchAdvance::succeeded;
+                }
+            }
+            digest.add(step);
+            digest.add(static_cast<uint8_t>(result));
+            digest.add(order.raised_events);
+            digest.add(worker);
+            if (result != SearchAdvance::in_progress) {
+                published += result == SearchAdvance::succeeded ? 1u : 0u;
+                break;
+            }
+        }
+    }
+    CHECK(started > 200);
+    CHECK(published > 20);
+    // Pins expansion order, scores, runs and published routes.
+    CHECK(digest.value == 0x3127e73ac71dbfc8ull);
+}
 } // namespace
 
 int main() {
+    check_expansion_states();
     SearchCellGrid grid;
     grid.allocate(1, 1);
     CHECK(grid.width == 1 && grid.height == 1 && grid.count == 8 && grid.cells.size() == 8);

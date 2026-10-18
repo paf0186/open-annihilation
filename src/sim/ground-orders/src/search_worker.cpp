@@ -286,67 +286,6 @@ int32_t SearchWorker::heuristic(int32_t x, int32_t z) const {
     return static_cast<int32_t>(product >> 16);
 }
 
-void SearchWorker::expand_neighbor(
-    const SearchHeap::Payload& parent, uint8_t parent_direction, uint32_t relative_turn
-) {
-    const auto direction = (static_cast<uint32_t>(parent_direction) + relative_turn) & 7u;
-    const auto x = static_cast<int32_t>(packed_x(parent)) + search_direction_x[direction];
-    const auto z = static_cast<int32_t>(packed_z(parent)) + search_direction_z[direction];
-    const auto ux = static_cast<uint32_t>(x);
-    const auto uz = static_cast<uint32_t>(z);
-    if (!in_map(ux, uz))
-        return;
-    auto& cell = at(ux, uz);
-    const auto visit = static_cast<SearchCellVisit>(cell.flags & 3u);
-    if (visit == SearchCellVisit::unvisited) {
-        const auto index = uz * width_ + ux;
-        mark_dirty(index);
-        const auto classification = classify(x, z);
-        if (classification < 1 && (cell.flags & search_seed_bit) == 0) {
-            cell.flags = static_cast<uint8_t>(cell.flags | 3u);
-            return;
-        }
-        const auto estimate = heuristic(x, z);
-        if (estimate > threshold_)
-            cell.flags = static_cast<uint8_t>(cell.flags | 1u);
-        else
-            cell.flags = static_cast<uint8_t>(cell.flags | 5u);
-        cell.predecessor = static_cast<uint8_t>(direction);
-        const auto extra = static_cast<int16_t>(
-            (1 < static_cast<int32_t>(classification)) ? 0 : search_difficult_extra
-        );
-        auto g = static_cast<int32_t>(move_cost_[direction]) +
-                 static_cast<int32_t>(turn_penalty_[relative_turn]) + packed_g(parent) + extra;
-        const auto run =
-            relative_turn == 0 ? static_cast<int16_t>(packed_run(parent) + 1) : int16_t{1};
-        if (relative_turn != 0 && packed_run(parent) < search_early_run_limit)
-            g += search_early_turn_penalty;
-        const auto f = g + estimate;
-        const auto handle = heap_.insert(
-            pack_node(static_cast<int16_t>(x), static_cast<int16_t>(z), g, f, extra, run)
-        );
-        cell.handle = handle;
-        return;
-    }
-    if (visit != SearchCellVisit::open)
-        return;
-    auto& node = heap_.payload(cell.handle);
-    auto g = static_cast<int32_t>(move_cost_[direction]) +
-             static_cast<int32_t>(turn_penalty_[relative_turn]) + packed_extra(node) +
-             packed_g(parent);
-    if (relative_turn != 0 && packed_run(parent) < search_early_run_limit)
-        g += search_early_turn_penalty;
-    if (g >= packed_g(node))
-        return;
-    cell.predecessor = static_cast<uint8_t>(direction);
-    const auto delta = g - packed_g(node);
-    node[1] = std::bit_cast<uint32_t>(g);
-    node[2] = std::bit_cast<uint32_t>(std::bit_cast<int32_t>(node[2]) + delta);
-    const auto run = relative_turn == 0 ? static_cast<int16_t>(packed_run(parent) + 1) : int16_t{1};
-    node[3] = (node[3] & 0xffffu) | (static_cast<uint32_t>(static_cast<uint16_t>(run)) << 16);
-    heap_.decrease_key(cell.handle);
-}
-
 uint32_t SearchWorker::expand_best() {
     const auto parent = heap_.peek();
     heap_.pop();
@@ -358,10 +297,73 @@ uint32_t SearchWorker::expand_best() {
         return 1;
     }
     cell.flags = 2;
+    const auto parent_x = static_cast<int32_t>(packed_x(parent));
+    const auto parent_z = static_cast<int32_t>(packed_z(parent));
+    const auto parent_g = packed_g(parent);
+    const auto parent_run = packed_run(parent);
+    const auto straight_run = static_cast<int16_t>(parent_run + 1);
+    const auto early_turn_penalty =
+        parent_run < search_early_run_limit ? search_early_turn_penalty : 0;
+    auto expand_neighbor = [&](uint32_t relative_turn) {
+        const auto direction = (static_cast<uint32_t>(cell.predecessor) + relative_turn) & 7u;
+        const auto x = parent_x + search_direction_x[direction];
+        const auto z = parent_z + search_direction_z[direction];
+        const auto ux = static_cast<uint32_t>(x);
+        const auto uz = static_cast<uint32_t>(z);
+        if (!in_map(ux, uz))
+            return;
+        auto& cell = at(ux, uz);
+        const auto visit = static_cast<SearchCellVisit>(cell.flags & 3u);
+        if (visit == SearchCellVisit::unvisited) {
+            const auto index = uz * width_ + ux;
+            mark_dirty(index);
+            const auto classification = classify(x, z);
+            if (classification < 1 && (cell.flags & search_seed_bit) == 0) {
+                cell.flags = static_cast<uint8_t>(cell.flags | 3u);
+                return;
+            }
+            const auto estimate = heuristic(x, z);
+            if (estimate > threshold_)
+                cell.flags = static_cast<uint8_t>(cell.flags | 1u);
+            else
+                cell.flags = static_cast<uint8_t>(cell.flags | 5u);
+            cell.predecessor = static_cast<uint8_t>(direction);
+            const auto extra = static_cast<int16_t>(
+                (1 < static_cast<int32_t>(classification)) ? 0 : search_difficult_extra
+            );
+            auto g = static_cast<int32_t>(move_cost_[direction]) +
+                     static_cast<int32_t>(turn_penalty_[relative_turn]) + parent_g + extra;
+            const auto run = relative_turn == 0 ? straight_run : int16_t{1};
+            if (relative_turn != 0)
+                g += early_turn_penalty;
+            const auto f = g + estimate;
+            const auto handle = heap_.insert(
+                pack_node(static_cast<int16_t>(x), static_cast<int16_t>(z), g, f, extra, run)
+            );
+            cell.handle = handle;
+            return;
+        }
+        if (visit != SearchCellVisit::open)
+            return;
+        auto& node = heap_.payload(cell.handle);
+        auto g = static_cast<int32_t>(move_cost_[direction]) +
+                 static_cast<int32_t>(turn_penalty_[relative_turn]) + packed_extra(node) + parent_g;
+        if (relative_turn != 0)
+            g += early_turn_penalty;
+        if (g >= packed_g(node))
+            return;
+        cell.predecessor = static_cast<uint8_t>(direction);
+        const auto delta = g - packed_g(node);
+        node[1] = std::bit_cast<uint32_t>(g);
+        node[2] = std::bit_cast<uint32_t>(std::bit_cast<int32_t>(node[2]) + delta);
+        const auto run = relative_turn == 0 ? straight_run : int16_t{1};
+        node[3] = (node[3] & 0xffffu) | (static_cast<uint32_t>(static_cast<uint16_t>(run)) << 16);
+        heap_.decrease_key(cell.handle);
+    };
     auto relative = -fan_;
     if (relative <= fan_) {
         do {
-            expand_neighbor(parent, cell.predecessor, static_cast<uint32_t>(relative) & 7u);
+            expand_neighbor(static_cast<uint32_t>(relative) & 7u);
             ++relative;
         } while (relative <= fan_);
     }

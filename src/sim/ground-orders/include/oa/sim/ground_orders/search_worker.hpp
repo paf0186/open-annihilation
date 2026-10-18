@@ -271,20 +271,6 @@ class SearchWorker {
     /// @param x cell column
     /// @param z cell row
     void mark_goal(int32_t x, int32_t z);
-    /// Opens or improves one neighbour of an expanded node.
-    ///
-    /// An unvisited cell is closed as blocked when it classifies below 1 (unless on
-    /// the wall-follow seed), otherwise opened with its move cost, turn penalty,
-    /// difficult-terrain extra and early-turn penalty, and marked as a goal cell
-    /// when its heuristic is within the threshold. An open cell whose new cost is
-    /// lower takes the new predecessor and moves up the heap.
-    ///
-    /// @param parent the expanded node's payload
-    /// @param parent_direction the direction the search reached the parent from
-    /// @param relative_turn turn from that direction, 0..7
-    void expand_neighbor(
-        const SearchHeap::Payload& parent, uint8_t parent_direction, uint32_t relative_turn
-    );
     /// Walks from the start toward the nearest goal, following walls both ways, and marks the path as seed cells.
     ///
     /// @return the lowest heuristic seen on the walk, 0 when it reached a goal cell
