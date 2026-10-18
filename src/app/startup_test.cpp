@@ -487,6 +487,8 @@ const std::vector<ValueCase>& value_cases() {
         {"--match-ticks", "60", {}},
         {"--training-map", "Coast", {"--training-worker"}},
         {"--local-ai-benchmark", "60", {}},
+        {"--experimental-math", "off", {}},
+        {"--experimental-pathfinder", "compatible", {}},
         {"--local-ai-map", "Coast", {"--local-ai-benchmark", "60"}},
         {"--training-limit", "90", {"--training-worker"}},
         {"--campaign", "Arm Campaign", {"--mission", "0"}},
@@ -1221,6 +1223,45 @@ int main() {
             !plain.busy_combat,
         "--busy-combat goes with --combat"
     );
+    const auto experiments = parse(
+        {"--local-ai-benchmark",
+         "60",
+         "--experimental-math",
+         "hardware",
+         "--experimental-pathfinder",
+         "weighted"}
+    );
+    expect(
+        experiments.experimental_math && experiments.experimental_pathfinder == "weighted",
+        "offline simulation experiments are explicit"
+    );
+    const auto compatible =
+        parse({"--experimental-math", "off", "--experimental-pathfinder", "compatible"});
+    expect(
+        !compatible.experimental_math && compatible.experimental_pathfinder == "compatible",
+        "explicitly disabling experiments keeps compatible defaults"
+    );
+    expect(
+        rejection({"--experimental-math", "quick"}) ==
+            "--experimental-math expects off or hardware",
+        "unknown math experiment is refused"
+    );
+    expect(
+        rejection({"--experimental-pathfinder", "quick"}) ==
+            "--experimental-pathfinder expects compatible or weighted",
+        "unknown path experiment is refused"
+    );
+    for (const auto& arguments : std::vector<std::vector<const char*>>{
+             {"--experimental-math", "hardware"},
+             {"--experimental-pathfinder", "weighted"},
+             {"--headless-check", "--experimental-math", "hardware"},
+         })
+        expect(
+            rejection(arguments) ==
+                "experimental simulation modes need --local-ai-benchmark, --training-worker or "
+                "--simulation-only",
+            "simulation experiments require an offline simulation run"
+        );
     const auto local_ai = parse({"--local-ai-benchmark", "60", "--local-ai-map", "Coast"});
     expect(
         local_ai.local_ai_ticks == 60 && local_ai.local_ai_map == "Coast" &&

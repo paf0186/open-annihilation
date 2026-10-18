@@ -343,6 +343,9 @@ struct Options {
     bool training_worker = false;
     /// Runs two local computer players without drawing or network pacing.
     std::optional<std::size_t> local_ai_ticks;
+    /// Uses binary64 coordinate rotation in offline simulation experiments.
+    bool experimental_math = false;
+    std::string experimental_pathfinder = "compatible"; ///< compatible or weighted priority
     std::string local_ai_map;            ///< selected map, or Ashap Plateau when installed
     std::string training_map;            ///< map name, or the first installed skirmish map
     std::size_t training_limit = 108000; ///< maximum simulation ticks in the episode

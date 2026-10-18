@@ -412,6 +412,8 @@ one, for the engine's developers.
 |---|---|
 | `--benchmark FRAMES` | Draws a skirmish and a campaign mission, each still and scrolling, for `FRAMES` frames each, at the zoom `--zoom` gives, and reports the zoom, the frame times and the memory in use. |
 | `--match-ticks N` | With `--headless-check`, plays a skirmish, a campaign mission or a recording for `N` ticks. |
+| `--experimental-math off\|hardware` | Selects compatible arithmetic or experimental binary64 rotation for offline simulation. See [simulation experiments](simulation-experiments.md). |
+| `--experimental-pathfinder compatible\|weighted` | Selects compatible or experimental weighted path priority for offline simulation. See [simulation experiments](simulation-experiments.md). |
 | `--local-ai-benchmark TICKS` | Measures two local computer players in one headless match. See [local AI measurements](local-ai-benchmark.md). |
 | `--local-ai-map NAME` | Selects the installed map for `--local-ai-benchmark`. |
 | `--training-worker` | Runs a skirmish controlled through JSON lines on standard input/output. See the [worker protocol](training-worker.md) and [Python client](training-python.md). |

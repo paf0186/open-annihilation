@@ -23,8 +23,9 @@ path keeps the existing arithmetic and intermediate precision. Rounding can
 change rotated coordinates and later simulation decisions. This option does
 not replace every game-math operation with host math functions.
 
-Weighted path searching gives the goal estimate 24 times its ordinary weight
-when ranking search candidates. It keeps movement costs, map and footprint
+Weighted path searching multiplies the raw goal-cost estimate by 24 when
+ranking search candidates. The compatible search adapts its weight from 1.5
+to 9. It keeps movement costs, map and footprint
 safety checks, and the set of accepted goals. A more direct search can do less
 work while choosing a different route. Route length, arrival time, congestion,
 combat and match outcomes can change; the weight is not a guarantee about

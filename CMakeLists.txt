@@ -3087,6 +3087,12 @@ endforeach()
           --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
           --scratch-root "${CMAKE_CURRENT_BINARY_DIR}/native-checks")
         set_tests_properties(native-training-worker PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
+        add_test(NAME native-simulation-experiments COMMAND ${Python3_EXECUTABLE}
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_native_simulation_experiments.py"
+          --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
+          --scratch-root "${CMAKE_CURRENT_BINARY_DIR}/native-checks"
+          --ticks 1800 --seed 123)
+        set_tests_properties(native-simulation-experiments PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
         add_test(NAME native-local-ai COMMAND ${Python3_EXECUTABLE}
           "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_native_local_ai.py"
           --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
@@ -3414,6 +3420,8 @@ if(BUILD_TESTING)
     add_test(NAME training-client-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_training_client.py)
     set_tests_properties(training-client-selftest PROPERTIES TIMEOUT 120)
+    add_test(NAME simulation-experiments-selftest COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_native_simulation_experiments.py --self-test)
     add_test(NAME local-ai-benchmark-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/benchmark_local_ai.py --self-test)
     add_test(NAME ai-benchmark-selftest COMMAND ${Python3_EXECUTABLE}

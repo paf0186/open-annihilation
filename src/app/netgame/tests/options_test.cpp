@@ -171,6 +171,19 @@ int main() {
         );
     }
 
+    expect(
+        rejection(
+            {"--headless-check",
+             "--simulation-only",
+             "--match-ticks",
+             "60",
+             "--experimental-math",
+             "hardware",
+             "--net-record",
+             "game.tad"}
+        ) == "experimental simulation modes cannot use network run modes",
+        "experimental simulation refuses a network recording"
+    );
     const auto demo = parse({"--play-demo", "game.tad", "--trace-digest", "demo.trace"});
     expect(
         demo.net.play_demo == "game.tad" && demo.app.trace_digest == "demo.trace",

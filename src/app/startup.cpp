@@ -1038,6 +1038,20 @@ take_match_option(std::string_view argument, ArgumentCursor& cursor, Options& op
         options.match_ticks = parse_count(option_value(cursor));
         return true;
     }
+    if (argument == "--experimental-math") {
+        const auto value = option_value(cursor);
+        if (value != "off" && value != "hardware")
+            throw std::runtime_error("--experimental-math expects off or hardware");
+        options.experimental_math = value == "hardware";
+        return true;
+    }
+    if (argument == "--experimental-pathfinder") {
+        const auto value = option_value(cursor);
+        if (value != "compatible" && value != "weighted")
+            throw std::runtime_error("--experimental-pathfinder expects compatible or weighted");
+        options.experimental_pathfinder = value;
+        return true;
+    }
     if (argument == "--local-ai-benchmark") {
         options.local_ai_ticks = parse_count(option_value(cursor));
         options.headless_check = true;
@@ -1470,6 +1484,8 @@ void write_startup_line(std::string_view text) {
                      "[--max-fps N] "
                      "[--hardware-acceleration[=off|basic|full] | --no-hardware-acceleration] "
                      "[--native-density] [--display-modes MODES] "
+                     "[--experimental-math off|hardware] "
+                     "[--experimental-pathfinder compatible|weighted] "
                      "[--local-ai-benchmark TICKS [--local-ai-map NAME]] "
                      "[--training-worker [--training-map NAME] [--training-limit N]] [--benchmark "
                      "FRAMES] [--simulation-only] [--match-ticks N "
@@ -1586,6 +1602,13 @@ void write_startup_line(std::string_view text) {
         throw std::runtime_error("--local-ai-benchmark cannot be combined with another run mode");
     if (!result.local_ai_ticks && !result.local_ai_map.empty())
         throw std::runtime_error("--local-ai-map needs --local-ai-benchmark");
+    if ((result.experimental_math || result.experimental_pathfinder != "compatible") &&
+        !(result.local_ai_ticks || result.training_worker ||
+          (result.headless_check && result.simulation_only && result.match_ticks)))
+        throw std::runtime_error(
+            "experimental simulation modes need --local-ai-benchmark, --training-worker or "
+            "--simulation-only"
+        );
     if (result.training_worker && result.training_limit == 0)
         throw std::runtime_error("--training-limit must be positive");
     if (result.training_worker && !result.seed)
