@@ -688,6 +688,23 @@ FrameStatsTable frame_stats_widest_table() noexcept {
     return table;
 }
 
+uint32_t offline_ticks_due(
+    OfflineClock& clock, uint64_t now_ns, uint32_t multiplier, bool running
+) noexcept {
+    if (!running || !clock.started || now_ns < clock.previous_ns) {
+        clock.previous_ns = now_ns;
+        clock.remainder = 0;
+        clock.started = running;
+        return 0;
+    }
+    const uint64_t elapsed = std::min(now_ns - clock.previous_ns, kNanosecondsPerSecond / 10);
+    clock.previous_ns = now_ns;
+    multiplier = std::clamp(multiplier, uint32_t{1}, kHighestOfflineSpeed);
+    const uint64_t ticks = elapsed * kTicksPerSecond * multiplier + clock.remainder;
+    clock.remainder = ticks % kNanosecondsPerSecond;
+    return static_cast<uint32_t>(ticks / kNanosecondsPerSecond);
+}
+
 uint64_t steady_now_ns() noexcept {
     return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                      std::chrono::steady_clock::now().time_since_epoch()

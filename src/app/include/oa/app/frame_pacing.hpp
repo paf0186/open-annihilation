@@ -37,6 +37,33 @@ inline constexpr uint64_t kInputActivityNs = 500 * kNanosecondsPerMillisecond;
 /// clock a real second holds, one tick each.
 inline constexpr uint32_t kTicksPerSecond = 30;
 
+/// Highest offline target multiplier, relative to the normal 30 ticks a second.
+inline constexpr uint32_t kHighestOfflineSpeed = 10000;
+/// Maximum simulation time spent before returning to input and drawing.
+inline constexpr uint64_t kOfflineTickBudgetNs = 12 * kNanosecondsPerMillisecond;
+
+/// Application-only offline clock; never stored in a match or sent to peers.
+struct OfflineClock {
+    uint64_t previous_ns{}; ///< last frame's wall-clock time
+    uint64_t remainder{};   ///< fractional ticks, in billionths
+    bool started{};         ///< a frame has established the time origin
+};
+
+/// Returns ticks due at an offline target without retaining overload debt.
+///
+/// Disabled frames reset the origin and fraction, so pauses, menus and shared
+/// games never accrue work. Gaps above 100 ms are discarded beyond that bound.
+/// The caller may stop early to keep drawing and input responsive; those ticks
+/// are dropped rather than replayed on later frames.
+///
+/// @param[in,out] clock application-only clock
+/// @param now_ns current steady-clock time
+/// @param multiplier target relative to normal, 1 through kHighestOfflineSpeed
+/// @param running the offline match is advancing and unpaused
+/// @return whole ticks due, bounded by 30,000
+[[nodiscard]] uint32_t
+offline_ticks_due(OfflineClock& clock, uint64_t now_ns, uint32_t multiplier, bool running) noexcept;
+
 /// The schedule of the loop's frames: a run of frames due one period apart
 /// from a start, which begins again whenever a frame starts early or ends
 /// late, or the rate changes. At the tick rate (kTicksPerSecond) every frame

@@ -1173,9 +1173,28 @@ void test_frame_history() {
     CHECK(frame_history_column(window.history, 0).severity == TimeSeverity::within_tick);
 }
 
+void test_offline_clock() {
+    using namespace oa::app::frame_pacing;
+    OfflineClock clock{};
+    CHECK(offline_ticks_due(clock, 0, 1000, true) == 0);
+    CHECK(offline_ticks_due(clock, kNanosecondsPerSecond / 60, 1000, true) == 499);
+    CHECK(offline_ticks_due(clock, kNanosecondsPerSecond / 30, 1000, true) == 500);
+    CHECK(offline_ticks_due(clock, kNanosecondsPerSecond, 10000, true) == 30000);
+    CHECK(offline_ticks_due(clock, 2 * kNanosecondsPerSecond, 1000, false) == 0);
+    CHECK(offline_ticks_due(clock, 3 * kNanosecondsPerSecond, 1000, true) == 0);
+    CHECK(offline_ticks_due(clock, 0, 1000, true) == 0);
+    CHECK(offline_ticks_due(clock, kNanosecondsPerSecond / 10, 1, true) == 3);
+    OfflineClock normal{};
+    uint32_t total = 0;
+    for (uint64_t frame = 0; frame <= 60; ++frame)
+        total += offline_ticks_due(normal, frame * kNanosecondsPerSecond / 60, 1, true);
+    CHECK(total == 30);
+}
+
 } // namespace
 
 int main() {
+    test_offline_clock();
     test_frames_keep_their_rate();
     test_ticks_stay_at_thirty_a_second();
     test_frames_show_even_motion();
