@@ -182,6 +182,35 @@ int main() {
     const auto& mask = all_seen;
 
     {
+        // Restarting a search clears distant touched blocks, including the
+        // highest bit of a full group and the final partial group.
+        OpenSampler sampler;
+        MovementMap map(17, 17, 1, 1, sampler);
+        fill(map);
+        SearchWorker worker;
+        SearchBegin begin;
+        Goal goal;
+        place(unit, 0, 0);
+        for (const auto target : std::array<std::array<int16_t, 2>, 2>{{{10, 14}, {16, 16}}}) {
+            goal.cell = target;
+            (void)worker.begin(make_record(unit, navigation, goal, map), begin, mask);
+            CHECK((worker.cell(target[0], target[1]).flags & search_goal_bit) != 0);
+            const auto previous = worker.cell(target[0], target[1]);
+            goal.cell = {0, 0};
+            CHECK(
+                worker.begin(make_record(unit, navigation, goal, map), begin, mask) ==
+                SearchAdvance::failed
+            );
+            const auto cleared = worker.cell(target[0], target[1]);
+            CHECK(cleared.flags == 0);
+            CHECK(cleared.predecessor == previous.predecessor && cleared.handle == previous.handle);
+            for (uint32_t z = 0; z < map.height(); ++z)
+                for (uint32_t x = 0; x < map.width(); ++x)
+                    CHECK(worker.cell(x, z).flags == (x == 0 && z == 0 ? search_goal_bit : 0));
+        }
+    }
+
+    {
         OpenSampler sampler;
         MovementMap map(8, 8, 1, 1, sampler);
         fill(map);

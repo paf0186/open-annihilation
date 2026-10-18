@@ -5,7 +5,9 @@
 #include "oa/sim/ground_orders/ground_runtime.hpp"
 #include "oa/sim/ground_orders/movement_map.hpp"
 #include "oa/sim/ground_orders/search_trace.hpp"
+#include "oa/sim/ground_orders/search_worker.hpp"
 #include <array>
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #define CHECK(x)                                                                                   \
@@ -301,6 +303,54 @@ int main() {
         trace.size() == 2 && trace[0][0] == 8 && trace[0][1] == 8 && trace[1][0] == 56 &&
         trace[1][1] == 8
     );
+
+    {
+        // Cell-backed reconstruction keeps byte-map validation, even when
+        // unrelated flags and handles differ or the route exceeds the ring.
+        std::array<SearchMapCell, 16> cells{};
+        for (std::size_t i = 0; i < cells.size(); ++i) {
+            cells[i].flags = 0xff;
+            cells[i].handle = SearchHeap::no_handle;
+            cells[i].predecessor = predecessors[i];
+        }
+        CHECK(
+            std::ranges::equal(
+                reconstruct_search_path_from_cells(4, 4, {0, 0}, {3, 0}, 1, 1, cells), trace
+            )
+        );
+        CHECK(reconstruct_search_path_from_cells(4, 4, {0, 0}, {4, 0}, 1, 1, cells).empty());
+        CHECK(reconstruct_search_path_from_cells(
+                  4, 4, {0, 0}, {3, 0}, 1, 1, std::span<const SearchMapCell>(cells).first(15)
+        )
+                  .empty());
+        cells[3].predecessor = 8;
+        CHECK(reconstruct_search_path_from_cells(4, 4, {0, 0}, {3, 0}, 1, 1, cells).empty());
+        cells[3].predecessor = 2;
+        CHECK(reconstruct_search_path_from_cells(4, 4, {0, 0}, {3, 0}, 1, 1, cells).empty());
+        cells[3].predecessor = 6;
+        cells[2].predecessor = 2;
+        CHECK(reconstruct_search_path_from_cells(4, 4, {0, 0}, {3, 0}, 1, 1, cells).empty());
+
+        constexpr uint32_t route_width = 128;
+        std::vector<uint8_t> turns(route_width * 2);
+        std::vector<SearchMapCell> turn_cells(turns.size());
+        uint32_t z = 0;
+        for (uint32_t x = 1; x < route_width; ++x) {
+            turns[z * route_width + x] = 6;
+            z ^= 1u;
+            turns[z * route_width + x] = z == 0 ? 0 : 4;
+        }
+        for (std::size_t i = 0; i < turns.size(); ++i)
+            turn_cells[i].predecessor = turns[i];
+        const auto retained = reconstruct_search_path(128, 2, {0, 0}, {127, 1}, 2, 3, turns);
+        CHECK(retained.size() == 64);
+        CHECK(
+            std::ranges::equal(
+                reconstruct_search_path_from_cells(128, 2, {0, 0}, {127, 1}, 2, 3, turn_cells),
+                retained
+            )
+        );
+    }
 
     // A mirrored navigator holds the shared route head and drives the same
     // ground steering.

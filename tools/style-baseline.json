@@ -42,7 +42,7 @@
    "tier-heap-container": 2
   },
   "src/sim/ground-orders/src/search_worker.cpp": {
-   "tier-heap-container": 2
+   "tier-heap-container": 1
   },
   "src/sim/map-runtime/include/oa/sim/map_runtime.hpp": {
    "tier-heap-container": 18,

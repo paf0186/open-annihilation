@@ -54,6 +54,8 @@ uint8_t heading_direction(uint16_t heading) noexcept {
 }
 
 void clear_dirty_cells(std::span<SearchMapCell> cells, std::span<uint32_t> dirty) {
+    constexpr uint32_t full_dirty_group = std::numeric_limits<uint32_t>::max();
+    constexpr int32_t cells_per_dirty_bit = 8;
     const auto cell_count = static_cast<int32_t>(cells.size());
     auto groups = (cell_count + 0xff) >> 8;
     groups -= 1;
@@ -70,11 +72,18 @@ void clear_dirty_cells(std::span<SearchMapCell> cells, std::span<uint32_t> dirty
             auto bits = dirty[static_cast<std::size_t>(group)];
             if (bits != 0) {
                 dirty[static_cast<std::size_t>(group)] = 0;
-                auto index = group << 8;
-                for (; bits != 0; bits >>= 1) {
-                    if ((bits & 1u) != 0)
+                if (bits == full_dirty_group) {
+                    const auto end = (group + 1) << 8;
+                    for (auto index = group << 8; index < end; ++index)
+                        cells[static_cast<std::size_t>(index)].flags = 0;
+                } else {
+                    while (bits != 0) {
+                        const auto index =
+                            (group << 8) +
+                            static_cast<int32_t>(std::countr_zero(bits)) * cells_per_dirty_bit;
                         clear_eight(index, false);
-                    index += 8;
+                        bits &= bits - 1;
+                    }
                 }
             }
             ++group;
@@ -84,11 +93,11 @@ void clear_dirty_cells(std::span<SearchMapCell> cells, std::span<uint32_t> dirty
     if (bits == 0)
         return;
     dirty[static_cast<std::size_t>(group)] = 0;
-    auto index = group << 8;
-    for (; bits != 0; bits >>= 1) {
-        if ((bits & 1u) != 0)
-            clear_eight(index, true);
-        index += 8;
+    while (bits != 0) {
+        const auto index =
+            (group << 8) + static_cast<int32_t>(std::countr_zero(bits)) * cells_per_dirty_bit;
+        clear_eight(index, true);
+        bits &= bits - 1;
     }
 }
 
@@ -485,18 +494,16 @@ void SearchWorker::fail_empty() {
 }
 
 void SearchWorker::publish_route() {
-    std::vector<uint8_t> predecessor(static_cast<std::size_t>(width_) * height_);
-    for (std::size_t i = 0; i < cells_.size(); ++i)
-        predecessor[i] = cells_[i].predecessor;
-    route_ = reconstruct_search_path(
+    const auto route = reconstruct_search_path_from_cells(
         width_,
         height_,
         start_,
         finish_,
         record_.movement_map->footprint_x(),
         record_.movement_map->footprint_z(),
-        predecessor
+        std::span<const SearchMapCell>(cells_)
     );
+    route_.assign(route.begin(), route.end());
 }
 
 SearchAdvance SearchWorker::begin(
