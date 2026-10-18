@@ -1704,6 +1704,8 @@ struct NetworkPlay::NetHost {
         finish_recording(host);
         // Both machines share --net-record. Keep the hosting machine's file.
         joiner.net_->recording = {};
+        host.net_leave();
+        joiner.net_leave();
     }
 
     /// Plays the loopback match with the computer player the host seated.
