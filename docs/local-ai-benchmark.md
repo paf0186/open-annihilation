@@ -4,6 +4,30 @@ Normal game speed is 30 simulation ticks per second. Five hundred times that
 speed requires 15,000 ticks per second. Measure a developed battle as well as
 the opening: two commanders cost much less to simulate than growing armies.
 
+## Build configuration
+
+Record the build type and compiler flags with every comparison. The Check
+build retains assertions and is useful for validating deterministic results.
+Use a separate Release build to measure production throughput. With the local
+dependencies prepared by `run.sh`, link-time optimization can be enabled with:
+
+```sh
+cmake -S . -B build-release -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -DOA_SELF_CHECKS=ON \
+  -DCMAKE_PREFIX_PATH="$PWD/local/deps/sdl-install"
+OA_BUILD_TYPE=Release ./run.sh \
+  --game-dir "/path/to/Total Annihilation" \
+  --local-ai-benchmark 108000 --seed 123 --mute
+```
+
+Compiler and linker support for link-time optimization is required. Release
+disables standard assertions; `OA_SELF_CHECKS=ON` retains the game's separate
+self-check code. Keep the project's strict floating-point flags. Validate
+reported states and complete traces across build configurations before
+attributing a speed difference to configuration alone.
+
+## Match measurements
+
 `--local-ai-benchmark TICKS` starts two opposing hard computer players, Arm and
 Core, inside one local skirmish. Both players have their normal AI controllers
 from match initialization. Each has a 250-unit limit and 1,000 starting metal
