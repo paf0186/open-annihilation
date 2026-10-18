@@ -211,6 +211,69 @@ void layer_evicts_oldest_past_400() {
     );
 }
 
+void wrapped_layer_keeps_survivors_and_stale_slots() {
+    Fixture f;
+    check(size_effect_world(*f.world, {4, 16}), "the small emitter rings were allocated");
+    auto& layer = f.world->layers[layer_smoke];
+    layer.head = 3;
+    layer.count = 5;
+    f.world->pooled_emitters = layer.count;
+    for (uint32_t index = 0; index < layer.count; ++index) {
+        Emitter emitter{};
+        emitter.kind = index % 2 == 0 ? EmitterKind::smoke : EmitterKind::feature_smoke;
+        emitter.deadline = f.game.tick - 1;
+        emitter.next_spawn = f.game.tick + 10;
+        emitter.origin.x = static_cast<int32_t>(index);
+        layer_emitter(*f.world, layer_smoke, index) = emitter;
+    }
+    f.advance();
+    check(
+        layer.head == 3 && layer.count == 2 && f.world->pooled_emitters == 2,
+        "wrapped compaction keeps the head and releases only spent emitters"
+    );
+    check(
+        f.emitter(layer_smoke, 0).origin.x == 1 && f.emitter(layer_smoke, 1).origin.x == 3,
+        "survivors crossing the end of a ring keep their order"
+    );
+    const int32_t stale_origins[]{2, 3, 4, 1, 3};
+    const auto base = std::size_t{layer_smoke} * f.world->layer_slots;
+    for (uint32_t slot = 0; slot < f.world->layer_slots; ++slot)
+        check(
+            f.world->emitter_block.slots[base + slot].origin.x == stale_origins[slot],
+            "wrapped compaction leaves the same stale slots"
+        );
+
+    for (int32_t origin : {5, 6}) {
+        Emitter emitter{};
+        emitter.kind = origin == 5 ? EmitterKind::smoke : EmitterKind::feature_smoke;
+        emitter.deadline = f.game.tick - 1;
+        emitter.next_spawn = f.game.tick + 10;
+        emitter.origin.x = origin;
+        ++f.world->pooled_emitters;
+        queue_emitter(*f.world, layer_smoke, emitter);
+    }
+    f.advance();
+    check(
+        layer.head == 3 && layer.count == 3 && f.world->pooled_emitters == 3 &&
+            f.emitter(layer_smoke, 0).origin.x == 1 && f.emitter(layer_smoke, 1).origin.x == 3 &&
+            f.emitter(layer_smoke, 2).origin.x == 6 && f.script.calls == 0,
+        "new emitters reuse the wrapped tail without moving the head or drawing random numbers"
+    );
+}
+
+void empty_unallocated_layers_stay_empty() {
+    Fixture f;
+    f.world->emitter_block = EmitterBlock{};
+    f.world->layer_slots = 0;
+    f.advance();
+    check(
+        f.world->pooled_emitters == 0 && f.script.calls == 0,
+        "an unallocated empty effect world ticks without visiting its emitter block"
+    );
+    for (const auto& layer : f.world->layers)
+        check(layer.count == 0, "an unallocated layer remains empty");
+}
+
 void layer_and_pool_follow_raised_limits() {
     // A mod's limits of 20,480 emitters a layer and 204,800 in the pool: a
     // layer grows to 20,481 before evicting, and the pool runs out across the
@@ -725,6 +788,8 @@ int main() {
     dark_and_start_smoke();
     smoke_column_spawns_on_interval();
     layer_evicts_oldest_past_400();
+    wrapped_layer_keeps_survivors_and_stale_slots();
+    empty_unallocated_layers_stay_empty();
     layer_and_pool_follow_raised_limits();
     layer_counts_pass_sixteen_bits_at_the_largest_queue();
     nano_stream_from_nozzle_to_box();

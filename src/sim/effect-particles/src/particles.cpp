@@ -1267,16 +1267,26 @@ Emitter& layer_emitter(EffectWorld& world, uint16_t layer, uint32_t index) noexc
 void tick_particles(EffectWorld& world, const oa::Game& game, const EffectHost& host) {
     for (uint16_t layer_index = 0; layer_index < layer_count; ++layer_index) {
         auto& layer = world.layers[layer_index];
+        if (layer.count == 0)
+            continue;
+        const auto slots = world.layer_slots;
+        auto* ring = world.emitter_block.slots.get() + std::size_t{layer_index} * slots;
+        auto read = layer.head;
+        auto write = layer.head;
         uint32_t kept = 0;
         for (uint32_t index = 0; index < layer.count; ++index) {
-            auto& emitter = layer_emitter(world, layer_index, index);
+            auto& emitter = ring[read];
+            if (++read == slots)
+                read = 0;
             if (finished(emitter, game)) {
                 release_emitter(world, emitter);
                 continue;
             }
             tick_emitter(world, emitter, game, host);
             if (kept != index)
-                layer_emitter(world, layer_index, kept) = emitter;
+                ring[write] = emitter;
+            if (++write == slots)
+                write = 0;
             ++kept;
         }
         layer.count = kept;
