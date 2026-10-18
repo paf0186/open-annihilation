@@ -1,5 +1,8 @@
 # Measuring local AI matches
 
+For controller options and the work needed to compare them, see the
+[AI comparison handoff](ai-comparison-handoff.md).
+
 Normal game speed is 30 simulation ticks per second. Five hundred times that
 speed requires 15,000 ticks per second. Measure a developed battle as well as
 the opening: two commanders cost much less to simulate than growing armies.
