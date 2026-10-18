@@ -777,7 +777,7 @@ void note_game_switches(const Options& options) {
          !net.launch_options.empty() || netgame_context().launch.launch_seen ||
          net.direct_game.kind != oa::ui::frontend_multiplayer::DirectGame::Kind::none))
         throw std::runtime_error("--local-ai-benchmark cannot be combined with network run modes");
-    if ((options.experimental_math || options.experimental_pathfinder != "compatible") &&
+    if (options.experimental_math &&
         (net.net_loopback_ticks || net.check_recording_hook || !net.play_demo.empty() ||
          !net.net_record.empty() || net.list_content || net.check_host_not_found ||
          net.opened_launch_check != OpenedLaunchCheck::none || !net.launch_path.empty() ||

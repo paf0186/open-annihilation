@@ -36,8 +36,7 @@ and reported by the readiness handshake:
 ```python
 with TrainingClient(
     "./build-check/open-annihilation", "/path/to/game",
-    setup_args=["--experimental-math", "hardware",
-                "--experimental-pathfinder", "weighted"],
+    setup_args=["--experimental-math", "hardware"],
 ) as game:
     print(game.hello_response["simulation"])
 ```

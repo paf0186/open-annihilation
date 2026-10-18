@@ -291,7 +291,7 @@ int Runtime::run_training_worker() {
                 response.key("math_mode");
                 response.string(options_.experimental_math ? "hardware" : "compatible");
                 response.key("pathfinder");
-                response.string(options_.experimental_pathfinder);
+                response.string("compatible");
                 response.end_object();
                 response.key("ticks_per_simulated_second");
                 response.integer(30);

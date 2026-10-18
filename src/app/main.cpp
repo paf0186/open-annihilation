@@ -45,7 +45,6 @@
 #include "oa/base/float_precision.hpp"
 #include "oa/base/threads.hpp"
 #include "oa/base/game_math/experimental.hpp"
-#include "oa/sim/ground_orders/experimental.hpp"
 #include "oa/data/defs/layout.hpp"
 #include "oa/platform/allocator.hpp"
 #include "oa/platform/machine.hpp"
@@ -2259,17 +2258,8 @@ int main(int argc, char** argv) {
             allow_piped_launch();
         Options parsed = parse_options(argc, argv, extension);
         oa::base::game_math::set_experimental_math(parsed.experimental_math);
-        oa::sim::ground_orders::set_experimental_pathfinder(
-            parsed.experimental_pathfinder == "weighted"
-                ? oa::sim::ground_orders::ExperimentalPathfinder::weighted
-            : parsed.experimental_pathfinder == "greedy"
-                ? oa::sim::ground_orders::ExperimentalPathfinder::greedy
-                : oa::sim::ground_orders::ExperimentalPathfinder::compatible
-        );
-        if (parsed.experimental_math || parsed.experimental_pathfinder != "compatible")
-            std::cerr << "simulation experiments: math "
-                      << (parsed.experimental_math ? "hardware" : "compatible") << ", pathfinder "
-                      << parsed.experimental_pathfinder << '\n';
+        if (parsed.experimental_math)
+            std::cerr << "simulation experiments: math hardware\n";
         // The Game files screen's check installs its scripted platform
         // before anything reads the hooks.
         if constexpr (self_checks_built)

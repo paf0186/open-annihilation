@@ -172,7 +172,7 @@ int Runtime::run_local_ai_benchmark(std::size_t ticks) {
         config.key("math_mode");
         config.string(options_.experimental_math ? "hardware" : "compatible");
         config.key("pathfinder");
-        config.string(options_.experimental_pathfinder);
+        config.string("compatible");
         config.key("seed");
         config.integer(options_.seed.value_or(kFixedRandomSeed));
         config.key("requested_ticks");

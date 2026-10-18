@@ -1045,15 +1045,6 @@ take_match_option(std::string_view argument, ArgumentCursor& cursor, Options& op
         options.experimental_math = value == "hardware";
         return true;
     }
-    if (argument == "--experimental-pathfinder") {
-        const auto value = option_value(cursor);
-        if (value != "compatible" && value != "weighted" && value != "greedy")
-            throw std::runtime_error(
-                "--experimental-pathfinder expects compatible, weighted or greedy"
-            );
-        options.experimental_pathfinder = value;
-        return true;
-    }
     if (argument == "--local-ai-benchmark") {
         options.local_ai_ticks = parse_count(option_value(cursor));
         options.headless_check = true;
@@ -1487,7 +1478,6 @@ void write_startup_line(std::string_view text) {
                      "[--hardware-acceleration[=off|basic|full] | --no-hardware-acceleration] "
                      "[--native-density] [--display-modes MODES] "
                      "[--experimental-math off|hardware] "
-                     "[--experimental-pathfinder compatible|weighted|greedy] "
                      "[--local-ai-benchmark TICKS [--local-ai-map NAME]] "
                      "[--training-worker [--training-map NAME] [--training-limit N]] [--benchmark "
                      "FRAMES] [--simulation-only] [--match-ticks N "
@@ -1604,7 +1594,7 @@ void write_startup_line(std::string_view text) {
         throw std::runtime_error("--local-ai-benchmark cannot be combined with another run mode");
     if (!result.local_ai_ticks && !result.local_ai_map.empty())
         throw std::runtime_error("--local-ai-map needs --local-ai-benchmark");
-    if ((result.experimental_math || result.experimental_pathfinder != "compatible") &&
+    if (result.experimental_math &&
         !(result.local_ai_ticks || result.training_worker ||
           (result.headless_check && result.simulation_only && result.match_ticks)))
         throw std::runtime_error(

@@ -488,7 +488,6 @@ const std::vector<ValueCase>& value_cases() {
         {"--training-map", "Coast", {"--training-worker"}},
         {"--local-ai-benchmark", "60", {}},
         {"--experimental-math", "off", {}},
-        {"--experimental-pathfinder", "compatible", {}},
         {"--local-ai-map", "Coast", {"--local-ai-benchmark", "60"}},
         {"--training-limit", "90", {"--training-worker"}},
         {"--campaign", "Arm Campaign", {"--mission", "0"}},
@@ -1223,42 +1222,26 @@ int main() {
             !plain.busy_combat,
         "--busy-combat goes with --combat"
     );
-    const auto experiments = parse(
-        {"--local-ai-benchmark",
-         "60",
-         "--experimental-math",
-         "hardware",
-         "--experimental-pathfinder",
-         "weighted"}
-    );
+    const auto experiments =
+        parse({"--local-ai-benchmark", "60", "--experimental-math", "hardware"});
+    expect(experiments.experimental_math, "offline simulation experiments are explicit");
+    for (const auto* removed : {"weighted", "greedy"})
+        expect(
+            rejection({"--local-ai-benchmark", "60", "--experimental-pathfinder", removed}) ==
+                "unknown option: --experimental-pathfinder",
+            "removed path priority experiments are refused"
+        );
+    const auto compatible = parse({"--experimental-math", "off"});
     expect(
-        experiments.experimental_math && experiments.experimental_pathfinder == "weighted",
-        "offline simulation experiments are explicit"
-    );
-    expect(
-        parse({"--local-ai-benchmark", "60", "--experimental-pathfinder", "greedy"})
-                .experimental_pathfinder == "greedy",
-        "aggressive path priority is a separate experiment"
-    );
-    const auto compatible =
-        parse({"--experimental-math", "off", "--experimental-pathfinder", "compatible"});
-    expect(
-        !compatible.experimental_math && compatible.experimental_pathfinder == "compatible",
-        "explicitly disabling experiments keeps compatible defaults"
+        !compatible.experimental_math, "explicitly disabling experiments keeps compatible defaults"
     );
     expect(
         rejection({"--experimental-math", "quick"}) ==
             "--experimental-math expects off or hardware",
         "unknown math experiment is refused"
     );
-    expect(
-        rejection({"--experimental-pathfinder", "quick"}) ==
-            "--experimental-pathfinder expects compatible, weighted or greedy",
-        "unknown path experiment is refused"
-    );
     for (const auto& arguments : std::vector<std::vector<const char*>>{
              {"--experimental-math", "hardware"},
-             {"--experimental-pathfinder", "weighted"},
              {"--headless-check", "--experimental-math", "hardware"},
          })
         expect(
