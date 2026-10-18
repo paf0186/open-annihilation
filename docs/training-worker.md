@@ -25,7 +25,10 @@ use standard error. Send `hello` before observing or stepping:
 
 Each response echoes `id` and contains `ok`. Hello reports version 1, the
 local player index, map dimensions, seed, tick rate (30 ticks per simulated
-second), episode limit and supported commands. Observe and step return
+second), episode limit and supported commands. Its `simulation` object names
+`math_mode` and `pathfinder`, including explicit compatible defaults. Record
+these settings with training results; [experimental modes](simulation-experiments.md)
+can change behavior. Observe and step return
 `tick`, `terminated`, `truncated`, `outcome` and `observation`. Step also
 returns `tick_before`, `ticks_advanced` and command results. Commands are
 issued before advancing complete ticks. Victory/defeat terminates an episode;

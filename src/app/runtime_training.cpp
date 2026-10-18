@@ -286,6 +286,13 @@ int Runtime::run_training_worker() {
                 response.integer(match_timing_.tick);
                 response.key("seed");
                 response.integer(options_.seed.value_or(1));
+                response.key("simulation");
+                response.begin_object();
+                response.key("math_mode");
+                response.string(options_.experimental_math ? "hardware" : "compatible");
+                response.key("pathfinder");
+                response.string(options_.experimental_pathfinder);
+                response.end_object();
                 response.key("ticks_per_simulated_second");
                 response.integer(30);
                 response.key("episode_limit");

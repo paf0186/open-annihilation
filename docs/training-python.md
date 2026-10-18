@@ -29,6 +29,19 @@ with TrainingClient("./build-check/open-annihilation", "/path/to/game") as game:
     game.reset(seed=456)
 ```
 
+To select an [offline simulation experiment](simulation-experiments.md), pass
+its command-line settings through `setup_args`. They are retained across resets
+and reported by the readiness handshake:
+
+```python
+with TrainingClient(
+    "./build-check/open-annihilation", "/path/to/game",
+    setup_args=["--experimental-math", "hardware",
+                "--experimental-pathfinder", "weighted"],
+) as game:
+    print(game.hello_response["simulation"])
+```
+
 Move coordinates are whole world units: X/Z form the horizontal plane and Y
 is elevation. They are neither screen pixels nor metres. Choose a destination
 inside the resolved map dimensions. Handles are opaque, episode-scoped values;

@@ -71,6 +71,8 @@ def trajectory(worker, extra_observations=False):
         for _ in range(5):
             check(worker.observe()["observation"] == first["observation"],
                   "repeated observe changed observation")
+    check(hello["simulation"] == {"math_mode": "compatible", "pathfinder": "compatible"},
+          "default training policies were not reported")
     own_units = first["observation"]["own_units"]
     check(bool(own_units), "episode has no owned units")
     unit = own_units[0]
@@ -129,6 +131,21 @@ def main():
               "episode limit did not truncate at exact boundary")
         rejected(limited, "step", "episode_ended", player=limited.hello_response["player"],
                  ticks=1, commands=[])
+
+    for math_mode, pathfinder in (("hardware", "weighted"), ("off", "greedy")):
+        with TrainingClient(args.native, args.game_dir, timeout=args.timeout,
+                            scratch_root=args.scratch_root,
+                            setup_args=["--experimental-math", math_mode,
+                                        "--experimental-pathfinder", pathfinder]) as experiment:
+            expected = {"math_mode": "hardware" if math_mode == "hardware" else "compatible",
+                        "pathfinder": pathfinder}
+            check(experiment.hello_response["simulation"] == expected,
+                  "training experiment was not reported")
+            first = experiment.step(ticks=15)["observation"]
+            check(experiment.reset()["simulation"] == expected,
+                  "reset changed the simulation policies")
+            check(experiment.step(ticks=15)["observation"] == first,
+                  "experimental training reset changed the seeded trajectory")
 
 
 if __name__ == "__main__":
