@@ -411,6 +411,10 @@ one, for the engine's developers.
 |---|---|
 | `--benchmark FRAMES` | Draws a skirmish and a campaign mission, each still and scrolling, for `FRAMES` frames each, at the zoom `--zoom` gives, and reports the zoom, the frame times and the memory in use. |
 | `--match-ticks N` | With `--headless-check`, plays a skirmish, a campaign mission or a recording for `N` ticks. |
+| `--training-worker` | Runs a skirmish controlled through JSON lines on standard input/output. See the [worker protocol](training-worker.md) and [Python client](training-python.md). |
+| `--training-map NAME` | Selects the installed skirmish map for `--training-worker`. |
+| `--training-limit N` | Sets the training episode limit in ticks (default 108000). |
+| `--simulation-only` | With `--headless-check --match-ticks N`, skips drawing between skirmish ticks and reports ticks per second, including logging but excluding setup. Stops on a simulation error. A requested snapshot is drawn once at the end. Cannot be used with `--frame-rate`, `--campaign`, `--load`, `--save-after` or `--benchmark`. |
 | `--campaign NAME` | The campaign of the mission a headless run plays. It needs `--mission`. |
 | `--mission N` | The mission of `--campaign` a headless run plays. |
 | `--past-outcome` | Plays the mission on past its victory or defeat. |
