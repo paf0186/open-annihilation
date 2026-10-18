@@ -1349,12 +1349,24 @@ void Match::update_moving_sight(sim::unit_spawn::Slot& slot) {
 
 void Match::update_player_sight(const oa::Player& player) {
     auto& world = state();
+    auto context = sight_context();
     uint32_t count = 0;
     const oa::Unit* first = oa::world_player_units(&world, &player, &count);
     for (uint32_t i = 0; i < count; ++i) {
         const auto index = oa::world_unit_slot(&world, &first[i]);
-        if ((first[i].flags & OA_UNIT_FLAG_LIVE) != 0 && index < slots_.size())
-            update_moving_sight(slots_[index]);
+        if ((first[i].flags & OA_UNIT_FLAG_LIVE) == 0 || index >= slots_.size())
+            continue;
+        auto& unit = slots_[index].record;
+        const auto* def = oa::world_unit_def_of(&world, &unit);
+        const auto* owner = oa::world_unit_owner(&world, &unit);
+        if (def == nullptr || owner == nullptr) {
+            fault_.note("sight stamp requires the unit's type and owner");
+            continue;
+        }
+        // Stamps share the coverage buffers, but each reads the flags left
+        // by the preceding unit's fog and radar updates.
+        context.visibility_flags = world.game.visibility_flags;
+        sim::visibility_state::move_unit_sight(unit, *def, *owner, context);
     }
 }
 

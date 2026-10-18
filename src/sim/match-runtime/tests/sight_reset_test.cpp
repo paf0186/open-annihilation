@@ -142,14 +142,18 @@ void player_loop_maps_around_standing_units() {
     auto& game = f.match->state().game;
     game.visibility_flags = mapping_rule;
     auto& slot = f.spawn(0, 64, 64);
+    auto& other = f.spawn(0, 192, 192);
     auto& grid = f.match->sight_mutable();
     std::fill(grid.player_bits.begin(), grid.player_bits.end(), uint16_t{0});
     f.run(1);
     const auto own = stamped_cell(f, slot);
+    const auto other_cell = stamped_cell(f, other);
+    CHECK(own != other_cell);
     CHECK(grid.player_bits[own] == 0x0001);
+    CHECK(grid.player_bits[other_cell] == 0x0001);
     CHECK(
         std::count(grid.player_bits.begin(), grid.player_bits.end(), uint16_t{0}) ==
-        static_cast<std::ptrdiff_t>(grid.player_bits.size() - 1)
+        static_cast<std::ptrdiff_t>(grid.player_bits.size() - 2)
     );
     std::cout << "player loop maps around standing units passed\n";
 }
