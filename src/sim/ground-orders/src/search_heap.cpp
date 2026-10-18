@@ -81,25 +81,27 @@ void SearchHeap::sift_up(std::size_t position_value) {
     if (position_value == 0)
         return;
     const auto moving = heap_[position_value];
+    const auto moving_score = score(nodes_[moving]);
     auto parent = (position_value - 1) / 2;
-    if (score(node(moving)) >= score(node(heap_[parent])))
+    if (moving_score >= score(nodes_[heap_[parent]]))
         return;
     heap_[position_value] = heap_[parent];
-    node(heap_[position_value]).heap_position_or_next_free = static_cast<int32_t>(position_value);
+    nodes_[heap_[position_value]].heap_position_or_next_free = static_cast<int32_t>(position_value);
     while (parent != 0) {
         const auto next_parent = (parent - 1) / 2;
-        if (score(node(moving)) >= score(node(heap_[next_parent])))
+        if (moving_score >= score(nodes_[heap_[next_parent]]))
             break;
         heap_[parent] = heap_[next_parent];
-        node(heap_[parent]).heap_position_or_next_free = static_cast<int32_t>(parent);
+        nodes_[heap_[parent]].heap_position_or_next_free = static_cast<int32_t>(parent);
         parent = next_parent;
     }
     heap_[parent] = moving;
-    node(moving).heap_position_or_next_free = static_cast<int32_t>(parent);
+    nodes_[moving].heap_position_or_next_free = static_cast<int32_t>(parent);
 }
 
 void SearchHeap::sift_down(std::size_t position_value) {
     const auto moving = heap_[position_value];
+    const auto moving_score = score(nodes_[moving]);
     while (true) {
         const auto left = position_value * 2 + 1;
         if (left >= heap_.size())
@@ -107,17 +109,17 @@ void SearchHeap::sift_down(std::size_t position_value) {
         const auto right = left + 1;
         auto selected = left;
         // The left child is picked when the scores compare equal.
-        if (right < heap_.size() && score(node(heap_[right])) < score(node(heap_[left])))
+        if (right < heap_.size() && score(nodes_[heap_[right]]) < score(nodes_[heap_[left]]))
             selected = right;
-        if (score(node(moving)) <= score(node(heap_[selected])))
+        if (moving_score <= score(nodes_[heap_[selected]]))
             break;
         heap_[position_value] = heap_[selected];
-        node(heap_[position_value]).heap_position_or_next_free =
+        nodes_[heap_[position_value]].heap_position_or_next_free =
             static_cast<int32_t>(position_value);
         position_value = selected;
     }
     heap_[position_value] = moving;
-    node(moving).heap_position_or_next_free = static_cast<int32_t>(position_value);
+    nodes_[moving].heap_position_or_next_free = static_cast<int32_t>(position_value);
 }
 
 void SearchHeap::remove_slot(Handle handle) {
