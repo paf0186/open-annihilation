@@ -185,12 +185,13 @@ RotatedPair rotate_pair(int32_t first, int32_t second, int16_t angle) noexcept {
         return binary64_rotate_pair(first, second, angle);
     const SineCosine angle_values = angle_word_sine_cosine(angle);
     const Extended sine_value = angle_values.sine, cosine_value = angle_values.cosine;
-    const auto product = [](Extended factor, int32_t coordinate) {
-        return to_double(multiply(factor, to_extended(coordinate), Precision::bits_53));
+    const Extended first_value = to_extended(first), second_value = to_extended(second);
+    const auto product = [](Extended factor, Extended coordinate) {
+        return to_double(multiply(factor, coordinate, Precision::bits_53));
     };
     return {
-        rounded(product(cosine_value, first) - product(sine_value, second)),
-        rounded(product(sine_value, first) + product(cosine_value, second))
+        rounded(product(cosine_value, first_value) - product(sine_value, second_value)),
+        rounded(product(sine_value, first_value) + product(cosine_value, second_value))
     };
 }
 
