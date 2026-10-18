@@ -132,7 +132,7 @@ def main():
         rejected(limited, "step", "episode_ended", player=limited.hello_response["player"],
                  ticks=1, commands=[])
 
-    for math_mode, pathfinder in (("hardware", "weighted"), ("off", "greedy")):
+    for math_mode, pathfinder in (("hardware", "weighted"), ("off", "weighted")):
         with TrainingClient(args.native, args.game_dir, timeout=args.timeout,
                             scratch_root=args.scratch_root,
                             setup_args=["--experimental-math", math_mode,
