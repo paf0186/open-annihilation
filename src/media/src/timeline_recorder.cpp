@@ -376,6 +376,7 @@ void TimelineRecorder::begin(
     header.first_tick = world.game.tick;
     header.last_tick = world.game.tick;
     header.viewer_player = player_of(viewer_player);
+    header.commander_rule = world.game.session_rules;
     record_water(header, world);
     for (uint8_t index{}; index < OA_PLAYER_COUNT; ++index)
         if (oa::sim::simulation_state::player_slot_active(index, world.game.players[index]))

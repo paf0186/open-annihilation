@@ -101,6 +101,7 @@ class Builder {
         header.first_tick = 0;
         header.last_tick = end - 1;
         header.viewer_player = viewer;
+        header.commander_rule = 1;
         timeline_.usable_end_tick = end;
         timeline_.verdict.finished = true;
         timeline_.verdict.clean = true;
@@ -862,7 +863,24 @@ void test_ending() {
     }
     builder.damage(2300, 2, 1, commander_type, 1, 0, 500, Spot{2800, 2800});
     builder.death(2400, 2, 1, commander_type, Spot{2800, 2800}, true);
-    const director::Timeline timeline{builder.done()};
+    director::Timeline timeline{builder.done()};
+    for (const int32_t rule : {0, 2, 3, -1}) {
+        timeline.header.commander_rule = rule;
+        const director::Plan continuing{planned(timeline, "continuing after commander death")};
+        expect(
+            continuing.script.director.end_tick == timeline.usable_end_tick,
+            "only the commander-death victory rule shortens the video"
+        );
+        expect(
+            std::none_of(
+                continuing.notes.begin(),
+                continuing.notes.end(),
+                [](const auto& note) { return note.find(": ending:") != std::string::npos; }
+            ),
+            "a commander loss under other rules is not a deciding ending"
+        );
+    }
+    timeline.header.commander_rule = 1;
     const director::Plan plan{planned(timeline, "ending")};
     const auto& shots{plan.script.director.shots};
     expect(

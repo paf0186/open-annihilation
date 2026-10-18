@@ -177,6 +177,13 @@ bool hide_blue_tank(void*, uint16_t unit) {
 void test_begin() {
     oa::World* world{make_world()};
     director::TimelineRecorder recorder{};
+    for (const int32_t rule : {0, 1, 2, 3}) {
+        world->game.session_rules = rule;
+        recorder.begin(*world, watcher, "Rule check");
+        expect(
+            recorder.take().header.commander_rule == rule, "record the installed commander rule"
+        );
+    }
     recorder.begin(*world, watcher, "Coast To Coast");
     recorder.finish(*world, director::ReplayVerdict{true, true, true, false, 0, 0, {}});
     const director::Timeline timeline{recorder.take()};
@@ -187,6 +194,7 @@ void test_begin() {
         header.first_tick == start_tick && header.last_tick == start_tick, "first and last tick"
     );
     expect(header.viewer_player == watcher, "viewer");
+    expect(header.commander_rule == world->game.session_rules, "commander rule");
     expect(header.players.size() == 3, "three players");
     if (header.players.size() == 3) {
         const director::TimelinePlayer& first{header.players[0]};

@@ -92,6 +92,7 @@ struct TimelineHeader {
     uint32_t first_tick{}; ///< the tick the replay started on
     uint32_t last_tick{};  ///< the last tick replayed
     uint8_t viewer_player{no_player};
+    int32_t commander_rule{}; ///< Game.session_rules: 0 continues, 1 ends, 2 deathmatch
     std::vector<TimelinePlayer> players{};      ///< in player index order
     std::vector<TimelineUnitType> unit_types{}; ///< the types used, in type index order
     std::vector<TimelineWeapon> weapons{};      ///< the weapons used, in weapon id order

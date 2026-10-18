@@ -10,6 +10,7 @@
 
 #include "oa/core/weapon_def.h"
 #include "oa/sim/match_runtime.hpp"
+#include "oa/sim/scenario/commander_rules.hpp"
 #include "planner_internal.hpp"
 #include "planner_tuning.hpp"
 
@@ -438,14 +439,17 @@ void find_engagement(Analysis& analysis) {
     }
 }
 
-/// Finds the deciding commander death: the first after which at most one
-/// team has a live commander. A death that leaves two teams or more with
-/// one decides nothing, so a game that ends that way, or whose usable end
+/// Under the commander-death victory rule, finds the first death after which
+/// at most one team has a live commander. A death that leaves two teams or
+/// more with one decides nothing, so a game that ends that way, or whose usable end
 /// comes before its deciding death, has none and is directed to its end.
 ///
 /// @param[in,out] analysis the analysis; its lives are followed
 void find_deciding_death(Analysis& analysis) {
     const Timeline& timeline{*analysis.timeline};
+    if (timeline.header.commander_rule !=
+        static_cast<int32_t>(oa::sim::scenario::CommanderRule::game_ends))
+        return;
     const auto teams_with_commanders{[&](uint32_t tick) {
         std::array<bool, player_slots> live{};
         for (const uint8_t player : analysis.combatants)

@@ -279,12 +279,13 @@ allocation that fails stops the recording, and `finish` and `take` throw it.
   lands, as much as a close view holds, then with its attackers that fit.
   Long-range fire landing in a hot spot is framed from its launch too when
   the whole map's view can show both.
-- The ending: the deciding commander death (the first after which at most
-  one team has a live commander, else the last) is held from
+- The ending under the commander-death victory rule: the deciding commander
+  death (the first after which at most one team has a live commander) is held from
   `ending_lead_ticks` before it, then pulled back from with a 0.2 Hz spring
   after `ending_hold_ticks`; the video ends `ending_pull_back_ticks` later.
   Nothing after it is considered, so the loser's units dying in a cascade
-  make no shot.
+  make no shot. Annihilation, deathmatch and unknown commander rules are
+  followed to the usable recording end.
 
 Every number that shapes this is a named constant: those `planner.hpp`
 publishes, and the rest grouped in `src/media/src/planner_tuning.hpp`, so the shots

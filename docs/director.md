@@ -53,9 +53,10 @@ advancing on an enemy base, cuts to where most damage lands in the next
 seconds and stays with a battle while it goes on, frames long-range fire
 wide from launch to impact or shows a gun firing and then its shell
 landing, interrupts for commander deaths and large blasts, and ends on the
-commander death that decides the game, held and pulled back: the first
-after which at most one side has a commander. A game no commander death
-decides is directed to its end; a commander the replay replaces in its
+commander death that decides the game under the commander-death victory
+rule, held and pulled back: the first after which at most one side has a
+commander. An annihilation or deathmatch game, or one no commander death
+decides, is directed to its end; a commander the replay replaces in its
 slot with another of its player's on the same tick is no loss. A subject
 whose view overlaps one shown in the last minute counts for less, so the
 camera does not go back and forth between the same places; views are
