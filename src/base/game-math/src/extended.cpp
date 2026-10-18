@@ -3,6 +3,7 @@
 
 #include "oa/base/game_math/extended.hpp"
 #include "oa/base/game_math.hpp"
+#include "integer_product.hpp"
 
 #include <array>
 #include <bit>
@@ -674,6 +675,42 @@ Extended multiply(Extended a, Extended b, Precision precision) noexcept {
         false,
         a.exponent + b.exponent - 126,
         precision
+    );
+}
+
+double detail::integer_product(Extended factor, int32_t coordinate) noexcept {
+    constexpr uint64_t leading_bit = uint64_t{1} << 63;
+    constexpr uint64_t carried_significand = uint64_t{1} << 53;
+    constexpr uint64_t fraction_mask = 0xfffffffffffffULL;
+    constexpr int64_t minimum_normal_exponent = -1022, maximum_exponent = 1023;
+    const uint64_t sign = factor.negative != (coordinate < 0) ? leading_bit : 0;
+    if (factor.significand == 0 || coordinate == 0)
+        return std::bit_cast<double>(sign);
+    if ((factor.significand & leading_bit) == 0)
+        return to_double(multiply(factor, to_extended(coordinate), Precision::bits_53));
+
+    const auto bits = static_cast<uint32_t>(coordinate);
+    const uint64_t magnitude = coordinate < 0 ? uint64_t{0u - bits} : uint64_t{bits};
+    const U128 product = multiply_64(factor.significand, magnitude);
+    // A normalized 64-bit factor times a nonzero 32-bit magnitude has
+    // 64..95 significant bits, so every discarded bit lies in the low word.
+    const unsigned top =
+        product.high != 0 ? 127 - static_cast<unsigned>(std::countl_zero(product.high)) : 63;
+    const unsigned discarded = top - 52;
+    uint64_t kept = (product.low >> discarded) | (product.high << (64 - discarded));
+    const uint64_t half = uint64_t{1} << (discarded - 1);
+    const uint64_t remainder = product.low & ((uint64_t{1} << discarded) - 1);
+    if (remainder > half || (remainder == half && (kept & 1) != 0))
+        ++kept;
+    int64_t exponent = int64_t{factor.exponent} + top - 63;
+    if (kept == carried_significand) {
+        kept >>= 1;
+        ++exponent;
+    }
+    if (exponent < minimum_normal_exponent || exponent > maximum_exponent)
+        return to_double(multiply(factor, to_extended(coordinate), Precision::bits_53));
+    return std::bit_cast<double>(
+        sign | (static_cast<uint64_t>(exponent + 1023) << 52) | (kept & fraction_mask)
     );
 }
 

@@ -12,6 +12,7 @@
 #include "oa/base/game_math.hpp"
 #include "oa/base/game_math/extended.hpp"
 #include "oa/base/sha256.hpp"
+#include "../src/integer_product.hpp"
 
 #include <array>
 #include <bit>
@@ -271,6 +272,59 @@ void check_rounding_normalization() {
     }
 }
 
+/// Checks exact integer products, halfway rounding, signs and range fallbacks.
+void check_integer_products() {
+    constexpr uint64_t leading_bit = uint64_t{1} << 63;
+    constexpr std::array<int32_t, 12> coordinates{
+        0, 1, -1, 2, -2, 3, -3, 32767, -32768, 65536, INT32_MAX, INT32_MIN
+    };
+    constexpr std::array<uint64_t, 12> significands{
+        0,
+        1,
+        0x2000,
+        leading_bit,
+        leading_bit + 0x3ff,
+        leading_bit + 0x400,
+        leading_bit + 0x401,
+        leading_bit + 0xbff,
+        leading_bit + 0xc00,
+        leading_bit + 0xc01,
+        ~uint64_t{0} - 1,
+        ~uint64_t{0}
+    };
+    constexpr std::array<int32_t, 13> exponents{
+        -2000, -1107, -1076, -1075, -1074, -1023, -1022, 0, 991, 992, 1023, 1024, 2000
+    };
+    int mismatches = 0;
+    const auto check = [&mismatches](Extended factor, int32_t coordinate) {
+        const double expected =
+            gm::to_double(gm::multiply(factor, gm::to_extended(coordinate), Precision::bits_53));
+        if (!same_bits(gm::detail::integer_product(factor, coordinate), expected))
+            ++mismatches;
+    };
+    for (const uint64_t significand : significands)
+        for (const int32_t exponent : exponents)
+            for (const bool negative : {false, true})
+                for (const int32_t coordinate : coordinates)
+                    check(value(significand, exponent, negative), coordinate);
+    Sequence sequence{0xda21684fb539c70eULL};
+    for (int i = 0; i < 1000000; ++i) {
+        uint64_t significand = sequence.next();
+        if ((i & 1) == 0)
+            significand |= leading_bit;
+        const int32_t exponent = static_cast<int32_t>(sequence.next() % 4001) - 2000;
+        const bool negative = (sequence.next() & 1) != 0;
+        const int32_t coordinate = std::bit_cast<int32_t>(static_cast<uint32_t>(sequence.next()));
+        check(value(significand, exponent, negative), coordinate);
+    }
+    CHECK(mismatches == 0);
+    // Ties select the even retained significand, and a carry is applied
+    // before checking whether the resulting double is normal or infinite.
+    CHECK(same_bits(gm::detail::integer_product(value(leading_bit + 0x400, 0), 1), 1.0));
+    CHECK(same_bits(gm::detail::integer_product(value(leading_bit + 0xc00, 0), 1), 1.0 + 0x1p-51));
+    CHECK(same_bits(gm::detail::integer_product(value(~uint64_t{0}, 0), INT32_MIN), -0x1p32));
+}
+
 void check_named_values() {
     // pi and pi/2 at 64 bits.
     CHECK(same(gm::arctangent(0.0, -1.0), value(0xc90fdaa22168c235ULL, 1)));
@@ -500,6 +554,7 @@ int main() {
     check_wide_operations();
     check_rounding_boundaries();
     check_rounding_normalization();
+    check_integer_products();
     check_named_values();
     check_game_functions();
     check_sample_sets();
