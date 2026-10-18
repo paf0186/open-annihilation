@@ -98,7 +98,7 @@ void Match::update_player_slots() {
             scan_contacts();
     }
     // A multiplayer game ends once no human participant is left.
-    if (multiplayer_outcomes_) {
+    if (multiplayer_outcomes_ && human_participant_required_) {
         const auto next = sim::scenario::advance_abandoned_outcome(
             outcome_state_,
             sim::scenario::deathmatch(state().game),

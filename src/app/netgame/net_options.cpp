@@ -184,6 +184,11 @@ bool take_option(void* context, const char* name, const OptionValues& values, ui
     if (argument == "--net-loopback-check") {
         result.net_loopback_ticks = parse_count(value());
         effects |= option_effect::headless_check | option_effect::unattended;
+    } else if (argument == "--net-ai-benchmark") {
+        result.net_loopback_ticks = parse_count(value());
+        result.net_ai_benchmark = true;
+        result.net_loopback_each_ai = true;
+        effects |= option_effect::headless_check | option_effect::unattended;
     } else if (argument == "--net-loopback-watcher")
         result.net_loopback_watcher = true;
     else if (argument == "--net-loopback-computer")
@@ -626,12 +631,13 @@ const std::string& usage_runs() {
                 continue;
             listed += "[" + std::string(field.option) + "] ";
         }
-        listed += "[--list-content --json] "
-                  "[--net-loopback-check TICKS] [--net-loopback-watcher] "
-                  "[--net-loopback-computer] [--net-loopback-each-ai] [--check-host-not-found] "
-                  "[--check-opened-launch start|menu FILE] "
-                  "[--play-demo FILE.tad] "
-                  "[--demo-unit-table strict|ignore] [--net-record FILE] [--replay-viewer] ";
+        listed +=
+            "[--list-content --json] "
+            "[--net-loopback-check TICKS] [--net-ai-benchmark TICKS] [--net-loopback-watcher] "
+            "[--net-loopback-computer] [--net-loopback-each-ai] [--check-host-not-found] "
+            "[--check-opened-launch start|menu FILE] "
+            "[--play-demo FILE.tad] "
+            "[--demo-unit-table strict|ignore] [--net-record FILE] [--replay-viewer] ";
         return listed;
     }();
     return runs;
@@ -764,6 +770,8 @@ void note_game_switches(const Options& options) {
          !net.launch_options.empty() || netgame_context().launch.launch_seen ||
          net.direct_game.kind != oa::ui::frontend_multiplayer::DirectGame::Kind::none))
         throw std::runtime_error("--training-worker cannot be combined with network run modes");
+    if (options.simulation_only && net.net_ai_benchmark)
+        throw std::runtime_error("--simulation-only cannot be used with --net-ai-benchmark");
     if (options.simulation_only &&
         (net.net_loopback_ticks || net.check_recording_hook || !net.play_demo.empty()))
         throw std::runtime_error(

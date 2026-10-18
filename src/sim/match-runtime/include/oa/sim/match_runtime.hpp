@@ -671,6 +671,16 @@ class Match final : private SpawnSubsystems, private UnitValueHost {
     /// @param stays true to keep the host watching
     void set_host_stays_watching(bool stays) noexcept { host_stays_watching_ = stays; }
 
+    /// Selects whether a network match ends after its human participants leave.
+    ///
+    /// Required by default. A session of computer opponents can keep running
+    /// while its human viewers only watch.
+    ///
+    /// @param required false to keep a computer-only session running
+    void set_human_participant_required(bool required) noexcept {
+        human_participant_required_ = required;
+    }
+
     /// Opens the local player's placing of its commander (setup.commander-warp).
     ///
     /// Nothing opens without a live first unit of the local player's block,
@@ -3398,6 +3408,7 @@ class Match final : private SpawnSubsystems, private UnitValueHost {
     CommanderPlacement commander_placement_{CommanderPlacement::none};
     bool campaign_outcomes_{};
     bool multiplayer_outcomes_{};
+    bool human_participant_required_{true}; ///< set_human_participant_required
     // Set once end_local_game ended the local player's game: its outcome
     // checks no longer run, so the defeat stands.
     bool local_game_ended_{};

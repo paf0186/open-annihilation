@@ -17,6 +17,7 @@
 
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -242,6 +243,8 @@ int NetworkPlay::run_headless_demo(std::size_t ticks) {
         runtime_.match_zoom_target_ = runtime_.match_zoom_;
     }
     bool finished = false;
+    const auto start_tick = world.game.tick;
+    const auto started = std::chrono::steady_clock::now();
     for (std::size_t tick = 1; tick <= ticks && !finished && demo_; ++tick) {
         step_demo_frame();
         if (!demo_)
@@ -254,6 +257,16 @@ int NetworkPlay::run_headless_demo(std::size_t ticks) {
     }
     if (!demo_)
         return 1;
+    const double loop_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    const auto advanced_ticks = world.game.tick - start_tick;
+    std::printf(
+        "demo benchmark: %u ticks in %.6f s (%.2f ticks/s), drawing %u\n",
+        advanced_ticks,
+        loop_seconds,
+        loop_seconds > 0.0 ? static_cast<double>(advanced_ticks) / loop_seconds : 0.0,
+        drawing ? 1u : 0u
+    );
     std::printf(
         "demo tick %u: digest %016llx, %u live units, frames %u/%zu%s\n",
         world.game.tick,

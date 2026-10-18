@@ -36,6 +36,7 @@
 #include "oa/data/languages/interface_text.hpp"
 #include "oa/present/game_text.hpp"
 #include "oa/sim/ai.hpp"
+#include "oa/sim/simulation_state.hpp"
 #include "oa/sim/match_runtime.hpp"
 #include "oa/sim/messages.hpp"
 #include "oa/ui/console/console.hpp"
@@ -1563,6 +1564,148 @@ struct NetworkPlay::NetHost {
         };
     }
 
+    /// Measures opposing computer players without paced waits or drawn frames.
+    ///
+    /// Both human slots watch. Each machine owns one computer player and
+    /// receives the other's unit records. The loop includes both matches,
+    /// network traffic and periodic reporting, but excludes setup and recording
+    /// serialization. A recording keeps this live gameplay's network records.
+    ///
+    /// @param host hosting runtime's network state
+    /// @param joiner joining runtime's network state
+    /// @param ticks maximum networked ticks to advance
+    /// @param host_computer session id of the host's computer player
+    /// @param joiner_computer session id of the joiner's computer player
+    static void benchmark_ai_match(
+        NetworkPlay& host,
+        NetworkPlay& joiner,
+        std::size_t ticks,
+        uint32_t host_computer,
+        uint32_t joiner_computer
+    ) {
+        auto& host_world = *host.net_->net->world;
+        auto& client_world = *joiner.net_->net->world;
+        // An AI-only benchmark keeps playing when both human slots watch.
+        // Ordinary matches retain the abandoned-game outcome rule.
+        host.net_->binding.match->set_human_participant_required(false);
+        joiner.net_->binding.match->set_human_participant_required(false);
+        const auto host_ai = player_slot(host_world, host_computer);
+        const auto other_ai = player_slot(host_world, joiner_computer);
+        const auto client_ai = player_slot(client_world, joiner_computer);
+        if (host_ai >= OA_PLAYER_COUNT || other_ai >= OA_PLAYER_COUNT ||
+            client_ai >= OA_PLAYER_COUNT ||
+            host_world.game.players[host_ai].status != OA_PLAYER_STATUS_COMPUTER ||
+            client_world.game.players[client_ai].status != OA_PLAYER_STATUS_COMPUTER ||
+            host_world.game.players[host_ai].alliance[other_ai] != 0 ||
+            host_world.game.players[other_ai].alliance[host_ai] != 0 ||
+            local_commander(host) != 0 || local_commander(joiner) != 0)
+            throw std::runtime_error("AI benchmark needs two opposing computers and two watchers");
+        const auto* host_controllers = sim::ai::match_computer_players(*host.net_->binding.match);
+        const auto* client_controllers =
+            sim::ai::match_computer_players(*joiner.net_->binding.match);
+        if (host_controllers == nullptr || client_controllers == nullptr ||
+            host_world.game.session_rules != 0 || client_world.game.session_rules != 0)
+            throw std::runtime_error("AI benchmark needs active annihilation controllers");
+        constexpr std::size_t report_ticks = 1800;
+        constexpr double normal_ticks_per_second = 30.0;
+        const auto host_start_tick = host_world.game.tick;
+        const auto client_start_tick = client_world.game.tick;
+        const auto started = std::chrono::steady_clock::now();
+        auto window_started = started;
+        auto window_start_tick = host_start_tick;
+        uint32_t peak_units = 0;
+        bool defeated = false;
+        for (std::size_t tick = 1; tick <= ticks && !defeated; ++tick) {
+            host.net_frame();
+            joiner.net_frame();
+            loopback_step(host);
+            loopback_step(joiner);
+            loopback_pump(host, kTickPumpWaitMs);
+            loopback_pump(joiner, kTickPumpWaitMs);
+            for (const NetworkPlay* side : {&host, &joiner})
+                if (const char* fault = side->net_->binding.match->fault(); fault != nullptr)
+                    throw std::runtime_error(
+                        std::string("AI benchmark simulation error: ") + fault
+                    );
+            const auto host_units = live_units(host_world, host_ai);
+            const auto client_units = live_units(client_world, client_ai);
+            if (host.net_->binding.match->outcome() != sim::scenario::Outcome::ongoing ||
+                joiner.net_->binding.match->outcome() != sim::scenario::Outcome::ongoing)
+                throw std::runtime_error("AI benchmark cannot measure a finished match");
+            const auto& host_player = host_world.game.players[host_ai];
+            const auto& client_player = client_world.game.players[client_ai];
+            const bool host_participates = sim::simulation_state::player_participating(host_player);
+            const bool client_participates =
+                sim::simulation_state::player_participating(client_player);
+            const bool host_controller = host_controllers->players[host_ai].present != 0;
+            const bool client_controller = client_controllers->players[client_ai].present != 0;
+            if ((host_units != 0 && (!host_participates || !host_controller ||
+                                     host_player.status != OA_PLAYER_STATUS_COMPUTER)) ||
+                (client_units != 0 && (!client_participates || !client_controller ||
+                                       client_player.status != OA_PLAYER_STATUS_COMPUTER)))
+                throw std::runtime_error("AI benchmark lost an active computer controller");
+            peak_units = std::max(peak_units, host_units + client_units);
+            defeated = host_units == 0 || client_units == 0;
+            if (tick % report_ticks == 0 || tick == ticks || defeated) {
+                const auto now = std::chrono::steady_clock::now();
+                const double seconds = std::chrono::duration<double>(now - window_started).count();
+                const auto advanced = host_world.game.tick - window_start_tick;
+                std::printf(
+                    "AI window: tick %u, units %u / %u, kills %d / %d, %.2f ticks/s\n",
+                    host_world.game.tick,
+                    host_units,
+                    client_units,
+                    host_world.game.players[host_ai].kills,
+                    client_world.game.players[client_ai].kills,
+                    seconds > 0.0 ? static_cast<double>(advanced) / seconds : 0.0
+                );
+                std::printf(
+                    "AI state: tick %u, rules %d, participating %u / %u, controllers %u / %u, "
+                    "created %u / %u, metal %.0f / %.0f, energy %.0f / %.0f\n",
+                    host_world.game.tick,
+                    host_world.game.session_rules,
+                    host_participates ? 1u : 0u,
+                    client_participates ? 1u : 0u,
+                    host_controller ? 1u : 0u,
+                    client_controller ? 1u : 0u,
+                    host_player.units_created,
+                    client_player.units_created,
+                    host_player.metal_produced_total,
+                    client_player.metal_produced_total,
+                    host_player.energy_produced_total,
+                    client_player.energy_produced_total
+                );
+                std::fflush(stdout);
+                window_started = now;
+                window_start_tick = host_world.game.tick;
+            }
+        }
+        const double seconds =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        const auto host_ticks = host_world.game.tick - host_start_tick;
+        const auto client_ticks = client_world.game.tick - client_start_tick;
+        const double rate = seconds > 0.0 ? static_cast<double>(host_ticks) / seconds : 0.0;
+        std::printf(
+            "AI benchmark: %u / %u ticks in %.6f s (%.2f ticks/s; %.2fx normal), "
+            "peak units %u, defeated %u, record errors %u / %u\n",
+            host_ticks,
+            client_ticks,
+            seconds,
+            rate,
+            rate / normal_ticks_per_second,
+            peak_units,
+            defeated ? 1u : 0u,
+            host.net_->net->record_errors,
+            joiner.net_->net->record_errors
+        );
+        if (host_ticks == 0 || host_ticks != client_ticks || host.net_->net->record_errors != 0 ||
+            joiner.net_->net->record_errors != 0)
+            throw std::runtime_error("AI benchmark stopped without clean synchronized progress");
+        finish_recording(host);
+        // Both machines share --net-record. Keep the hosting machine's file.
+        joiner.net_->recording = {};
+    }
+
     /// Plays the loopback match with the computer player the host seated.
     ///
     /// The computer player plays on the host's machine at hard difficulty;
@@ -2589,14 +2732,23 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
     // The host may seat a computer player, which then plays the joiner, or
     // the host while the joiner watches. --net-loopback-each-ai seats one
     // on the joiner as well.
+    const bool ai_benchmark = net_options().net_ai_benchmark;
     const bool each_ai = net_options().net_loopback_each_ai;
     const bool computer = net_options().net_loopback_computer || each_ai;
     auto& host_info = mp::local_info(*host.lobby);
-    host_info.max_units = computer ? kLoopbackComputerUnitsPerPlayer : kLoopbackUnitsPerPlayer;
+    constexpr uint16_t benchmark_units_per_player = 250;
+    host_info.max_units = ai_benchmark ? benchmark_units_per_player
+                          : computer   ? kLoopbackComputerUnitsPerPlayer
+                                       : kLoopbackUnitsPerPlayer;
     host_info.metal_hundreds = 10;
     host_info.energy_hundreds = 10;
     host_info.side = 0;
     host_info.color = 0;
+    if (ai_benchmark) {
+        host_info.options |= OA_SETUP_OPTION_WATCHER;
+        // Play annihilation: losing a commander does not finish its owner.
+        host_info.options &= static_cast<uint16_t>(~OA_SETUP_OPTION_COMMANDER_MASK);
+    }
     const bool small_map = computer && select_map_named(kLoopbackComputerMap);
     std::snprintf(
         host_info.map_name,
@@ -2627,7 +2779,7 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
         },
         "rosters did not meet"
     );
-    const bool watching = net_options().net_loopback_watcher;
+    const bool watching = net_options().net_loopback_watcher || ai_benchmark;
     auto& client_info = mp::local_info(*client.lobby);
     client_info.side = 1;
     client_info.color = 1;
@@ -2804,8 +2956,10 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
                 mate.alliance[slot] = 1;
             }
         };
-        ally_lobby(*host.lobby, joiner_computer_id);
-        ally_lobby(*client.lobby, joiner_computer_id);
+        if (!ai_benchmark) {
+            ally_lobby(*host.lobby, joiner_computer_id);
+            ally_lobby(*client.lobby, joiner_computer_id);
+        }
         std::cout << "net loopback check: the joiner seated computer player "
                   << field_text(
                          mp::slot_player(*client.lobby, joiner_seat).name, sizeof(Player::name)
@@ -2820,7 +2974,7 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
     // verdicts stay with each battle room until its launch applies them.
     uint32_t taken_away_key = 0;
     int32_t synced_units = 0;
-    {
+    if (!ai_benchmark) {
         int32_t unit_count = 0;
         const CheckHost host_check = check_host(runtime_);
         mp::LobbyUnit* host_units =
@@ -2974,6 +3128,8 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
     // loaded and dropped them: neither match has the unit taken away, both
     // have every other.
     for (const auto* side : {&host, &client}) {
+        if (ai_benchmark)
+            break;
         const auto& world = *side->play->net_->net->world;
         bool kept = false;
         for (uint32_t type = 1; type < world.unit_def_count; ++type)
@@ -3029,6 +3185,10 @@ int NetworkPlay::run_net_loopback_check(std::size_t ticks) {
         blocks_without_presence == remote_blocks,
         "a remote setup block carried bytes after the engine signature"
     );
+    if (ai_benchmark) {
+        NetHost::benchmark_ai_match(*this, joiner_play, ticks, computer_id, joiner_computer_id);
+        return 0;
+    }
     if (computer) {
         NetHost::computer_match(
             *this, joiner_play, ticks, computer_id, watching, joiner_computer_id

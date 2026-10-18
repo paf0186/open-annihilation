@@ -50,6 +50,9 @@ struct NetOptions {
     // the computer-player match, and plays its recording back when --net-record
     // names a file.
     bool net_loopback_each_ai = false;
+    // Two opposing computer players while both human slots watch, without
+    // the loopback check's scripted orders and alliance changes.
+    bool net_ai_benchmark = false;
     // A join whose host is not found, played through the main loop (with
     // --frames and "-n1:<address>" naming an address where no game is
     // hosted): a launch counts as active until the game list begins to wait

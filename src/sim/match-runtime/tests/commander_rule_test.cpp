@@ -461,6 +461,30 @@ void abandoned_game_ends() {
     std::cout << "abandoned game ends passed\n";
 }
 
+// A session with no human participants can keep its outcome open, then
+// return to the usual abandoned-game rule.
+void watchers_can_keep_match_running() {
+    Fixture f({.multiplayer = true});
+    auto& world = f.match->state();
+    bind_setup(f);
+    world.player_info[0].options = OA_SETUP_OPTION_WATCHER;
+    world.game.players[1].status = OA_PLAYER_STATUS_COMPUTER;
+    world.unit_defs[1].energy_make = 30.0F;
+    (void)f.spawn(0, 64, 64);
+    (void)f.spawn(1, 200, 200);
+    CHECK(sim::scenario::connected_participants(world) == 0);
+    f.match->set_human_participant_required(false);
+    f.run(30);
+    CHECK(f.match->outcome() == sim::scenario::Outcome::ongoing);
+    CHECK(f.match->outcome_state().countdown < 0);
+    CHECK((f.match->outcome_state().flags & sim::scenario::outcome_flag::finished) == 0);
+    CHECK(world.game.players[1].energy_produced_total > 0.0F);
+    f.match->set_human_participant_required(true);
+    f.run(10);
+    CHECK(f.match->outcome() == sim::scenario::Outcome::defeat);
+    std::cout << "watchers can keep match running passed\n";
+}
+
 } // namespace
 
 int main() {
@@ -472,6 +496,7 @@ int main() {
         unbound_deathmatch_defeat_stands();
         multiplayer_victory();
         abandoned_game_ends();
+        watchers_can_keep_match_running();
         defeated_player_watches();
         defeated_host_stays_watching();
         defeated_winner_drops_the_win();

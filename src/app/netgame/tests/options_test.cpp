@@ -140,6 +140,7 @@ int main() {
     for (const auto& run : std::vector<std::vector<const char*>>{
              {"--play-demo", "game.tad"},
              {"--net-loopback-check", "60"},
+             {"--net-ai-benchmark", "60"},
              {"--check-recording-hook"},
              {"--net-record", "game.tad"},
              {"--list-content"},
@@ -190,6 +191,23 @@ int main() {
         rejection({"--net-loopback-check", "300", "--choose-game-dir"})
                 .find("--choose-game-dir opens a dialog") == 0,
         "--net-loopback-check with --choose-game-dir"
+    );
+    const auto ai = parse({"--net-ai-benchmark", "36000"});
+    expect(
+        ai.net.net_ai_benchmark && ai.net.net_loopback_each_ai &&
+            ai.net.net_loopback_ticks == 36000 && ai.app.headless_check && ai.app.unattended,
+        "AI benchmark runs opposing computer players unattended and headless"
+    );
+    expect(
+        rejection(
+            {"--simulation-only",
+             "--headless-check",
+             "--match-ticks",
+             "60",
+             "--net-ai-benchmark",
+             "60"}
+        ) == "--simulation-only cannot be used with --net-ai-benchmark",
+        "AI benchmark refuses the separate simulation-only run mode"
     );
     // The host-not-found check plays through the main loop, unattended and
     // without the intro.
@@ -339,6 +357,7 @@ int main() {
          {"--play-demo",
           "--demo-unit-table",
           "--net-loopback-check",
+          "--net-ai-benchmark",
           "--net-loopback-watcher",
           "--check-host-not-found",
           "--dplay-guid",
