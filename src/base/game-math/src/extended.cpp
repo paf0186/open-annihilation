@@ -589,6 +589,12 @@ double to_double(Extended value) noexcept {
 Extended round_to(Extended value, Precision precision) noexcept {
     if (value.significand == 0)
         return value;
+    constexpr uint64_t leading_bit = uint64_t{1} << 63;
+    constexpr uint64_t below_double_significand = 0x7ff;
+    if ((value.significand & leading_bit) != 0 &&
+        (precision == Precision::bits_64 ||
+         (precision == Precision::bits_53 && (value.significand & below_double_significand) == 0)))
+        return value;
     return pack(value.negative, U128{0, value.significand}, false, value.exponent - 63, precision);
 }
 

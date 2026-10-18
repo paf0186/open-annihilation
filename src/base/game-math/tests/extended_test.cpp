@@ -247,6 +247,30 @@ void check_rounding_boundaries() {
     }
 }
 
+/// Checks zero fields, normalization and already aligned significands.
+void check_rounding_normalization() {
+    for (const Precision precision : {Precision::bits_53, Precision::bits_64}) {
+        for (const bool negative : {false, true}) {
+            // A zero keeps every field; a nonzero value with no leading
+            // bit set must still be normalized even when no bits are lost.
+            const Extended signed_zero = value(0, 177, negative);
+            const Extended rounded_zero = gm::round_to(signed_zero, precision);
+            CHECK(rounded_zero.significand == 0);
+            CHECK(rounded_zero.exponent == signed_zero.exponent);
+            CHECK(rounded_zero.negative == negative);
+            CHECK(same(
+                gm::round_to(value(0x2000, 0, negative), precision),
+                value(0x8000000000000000ULL, -50, negative)
+            ));
+            for (const int32_t exponent :
+                 {-2000, -1075, -1074, -1023, -1022, 0, 1023, 1024, 2000}) {
+                const Extended aligned = value(0xaaaaaaaaaaaaa800ULL, exponent, negative);
+                CHECK(same(gm::round_to(aligned, precision), aligned));
+            }
+        }
+    }
+}
+
 void check_named_values() {
     // pi and pi/2 at 64 bits.
     CHECK(same(gm::arctangent(0.0, -1.0), value(0xc90fdaa22168c235ULL, 1)));
@@ -475,6 +499,7 @@ int main() {
     check_double_operations();
     check_wide_operations();
     check_rounding_boundaries();
+    check_rounding_normalization();
     check_named_values();
     check_game_functions();
     check_sample_sets();
