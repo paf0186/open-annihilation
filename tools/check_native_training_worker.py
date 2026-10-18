@@ -132,13 +132,12 @@ def main():
         rejected(limited, "step", "episode_ended", player=limited.hello_response["player"],
                  ticks=1, commands=[])
 
-    for math_mode, pathfinder in (("hardware", "weighted"), ("off", "weighted")):
+    for math_mode in ("hardware", "off"):
         with TrainingClient(args.native, args.game_dir, timeout=args.timeout,
                             scratch_root=args.scratch_root,
-                            setup_args=["--experimental-math", math_mode,
-                                        "--experimental-pathfinder", pathfinder]) as experiment:
+                            setup_args=["--experimental-math", math_mode]) as experiment:
             expected = {"math_mode": "hardware" if math_mode == "hardware" else "compatible",
-                        "pathfinder": pathfinder}
+                        "pathfinder": "compatible"}
             check(experiment.hello_response["simulation"] == expected,
                   "training experiment was not reported")
             first = experiment.step(ticks=15)["observation"]

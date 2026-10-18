@@ -2,11 +2,11 @@
 # SPDX-FileCopyrightText: The Open Annihilation Authors; see COPYRIGHT
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Check repeatable local AI play for all optional simulation modes.
+"""Check repeatable local AI play for both experimental math settings.
 
-Each combination runs twice from one seed. Explicitly disabling both options
-must reproduce the default state. Modes may differ from each other. Optional
-full trace comparisons run separately from measured repetitions.
+Each setting runs twice from one seed. Explicitly disabling the option must
+reproduce the default state. Modes may differ from each other. Optional full
+trace comparisons run separately from measured repetitions.
 """
 import argparse
 import copy
@@ -32,27 +32,23 @@ def check_modes(args):
     args.scratch_root.mkdir(parents=True, exist_ok=True)
     folder = Path(tempfile.mkdtemp(prefix="simulation-experiments-", dir=args.scratch_root.resolve()))
     report = {"schema_version": 1, "scratch": str(folder), "modes": [], "errors": [],
-              "comparison_note": "Each mode must repeat its own seeded state. Arithmetic and "
-              "route changes may alter matches, so cross-mode digests need not agree. "
-              "Only explicit off settings must agree with the default mode."}
+              "comparison_note": "Each math setting must repeat its own seeded state. "
+              "Arithmetic changes may alter matches, so cross-mode digests need not agree. "
+              "Only the explicit off setting must agree with the default mode."}
     default = None
     for math_mode in ("off", "hardware"):
-        for pathfinder in ("compatible", "weighted"):
-            mode_args = argparse.Namespace(**vars(args), repeats=2, goal_speed=500,
-                                           warmup_ticks=18000, experimental_math=math_mode,
-                                           experimental_pathfinder=pathfinder)
-            mode_args.scratch_root = folder
-            measured = benchmark(mode_args, require_activity=True)
-            report["modes"].append({"experimental_math": math_mode,
-                                    "experimental_pathfinder": pathfinder, "report": measured})
-            if not measured["ok"]:
-                report["errors"].append(f"{math_mode}/{pathfinder} failed native validation")
-            if math_mode == "off" and pathfinder == "compatible":
-                default = measured
+        mode_args = argparse.Namespace(**vars(args), repeats=2, goal_speed=500,
+                                       warmup_ticks=18000, experimental_math=math_mode)
+        mode_args.scratch_root = folder
+        measured = benchmark(mode_args, require_activity=True)
+        report["modes"].append({"experimental_math": math_mode, "report": measured})
+        if not measured["ok"]:
+            report["errors"].append(f"{math_mode} math failed native validation")
+        if math_mode == "off":
+            default = measured
     if default and default["ok"]:
         explicit_args = argparse.Namespace(**vars(args), experimental_math="off",
-                                           experimental_pathfinder="compatible",
-                                           explicit_compatible_modes=True)
+                                           explicit_compatible_math=True)
         explicit_args.native = args.native.resolve()
         explicit_args.game_dir = args.game_dir.resolve()
         explicit = run_native(explicit_args, folder / "explicit-off", trace=args.validate_traces)
