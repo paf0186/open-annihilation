@@ -39,6 +39,8 @@ if(BUILD_TESTING)
   target_include_directories(oa-base-signing-sealed-key-test SYSTEM PRIVATE ${oa_monocypher_dir})
   target_link_libraries(oa-base-signing-sealed-key-test PRIVATE oa-base-signing oa-data-registry
     oa-test-support oa-options)
+  # Keep that order when the rest of the tree reorders direct libraries.
+  set_property(TARGET oa-base-signing-sealed-key-test PROPERTY LINK_LIBRARIES_STRATEGY REORDER_MINIMALLY)
   add_test(NAME base-signing-sealed-key COMMAND oa-base-signing-sealed-key-test)
   set_tests_properties(base-signing-sealed-key PROPERTIES TIMEOUT 60)
 endif()
