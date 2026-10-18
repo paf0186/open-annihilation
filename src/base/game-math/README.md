@@ -27,6 +27,13 @@ every compiler, processor and maths library.
   selectors 12 and 14 use it.
 - `rotate_pair` rotates a coordinate pair by an angle word: each product of
   a coordinate with the sine or cosine and each sum is rounded to 53 bits.
+  On GNU/Clang x86-64 builds, processors with AVX-512F and FMA can compute
+  the same products from exact two-part coefficients, with explicit
+  nearest-even rounding and suppressed product exceptions. Runtime checks
+  select this path only when the processor and coefficient table support it;
+  other builds keep the integer product path. Final sums retain their usual
+  rounding. This automatic implementation preserves results and exception
+  flags; the separately selected experimental arithmetic has different rules.
 - `hypotenuse(x, y)` is the game's vector length: the magnitudes divided by
   the larger one, squared and summed, square-rooted and multiplied back, with
   every step rounded to 64 bits and then again to 53. The second rounding
