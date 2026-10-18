@@ -52,7 +52,7 @@ requested speed target is reported without failing it.
 Optional [simulation experiments](simulation-experiments.md) select hardware
 rotation arithmetic or weighted path searching. The runner accepts the same
 `--experimental-math off|hardware` and
-`--experimental-pathfinder compatible|weighted` options as the game. Defaults
+`--experimental-pathfinder compatible|weighted|greedy` options as the game. Defaults
 keep compatible behavior. Native configuration records `math_mode` and
 `pathfinder`, and repeated-state comparisons include them. Experimental modes
 must repeat themselves; their state need not match another mode.

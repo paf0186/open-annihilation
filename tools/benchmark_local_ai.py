@@ -336,7 +336,7 @@ def self_test():
     parsed = parse_output(output(records), 1800, 123)
     require(parsed["summary"]["digest"] == summary["digest"], "valid report was rejected")
     for math_mode in ("compatible", "hardware"):
-        for pathfinder in ("compatible", "weighted"):
+        for pathfinder in ("compatible", "weighted", "greedy"):
             modes = copy.deepcopy(records)
             modes[0].update(math_mode=math_mode, pathfinder=pathfinder)
             mode_run = parse_output(output(modes), 1800, 123, math_mode=math_mode,
@@ -425,8 +425,8 @@ def main(require_activity=False):
     parser.add_argument("--map", help="installed skirmish map name")
     parser.add_argument("--experimental-math", choices=("off", "hardware"), default="off",
                         help="select compatible arithmetic or offline hardware rotation arithmetic")
-    parser.add_argument("--experimental-pathfinder", choices=("compatible", "weighted"),
-                        default="compatible", help="select compatible search or offline weighted search")
+    parser.add_argument("--experimental-pathfinder", choices=("compatible", "weighted", "greedy"),
+                        default="compatible", help="select compatible, weighted or research greedy search")
     parser.add_argument("--warmup-ticks", type=int, default=18000,
                         help="report developed windows starting after this many simulated ticks")
     parser.add_argument("--goal-speed", type=float, default=500)

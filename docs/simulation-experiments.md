@@ -6,7 +6,7 @@ optional settings allow performance experiments that can change game behavior:
 | Option | Default | Experimental setting |
 |---|---|---|
 | `--experimental-math` | `off` | `hardware` |
-| `--experimental-pathfinder` | `compatible` | `weighted` |
+| `--experimental-pathfinder` | `compatible` | `weighted` or `greedy` |
 
 Enabling either experiment is allowed only for offline local AI benchmarks,
 training workers, and headless runs with `--simulation-only`. Enabled
@@ -23,13 +23,19 @@ path keeps the existing arithmetic and intermediate precision. Rounding can
 change rotated coordinates and later simulation decisions. This option does
 not replace every game-math operation with host math functions.
 
-Weighted path searching multiplies the raw goal-cost estimate by 24 when
-ranking search candidates. The compatible search adapts its weight from 1.5
-to 9. It keeps movement costs, map and footprint
-safety checks, and the set of accepted goals. A more direct search can do less
-work while choosing a different route. Route length, arrival time, congestion,
-combat and match outcomes can change; the weight is not a guarantee about
-route quality in every game situation.
+Weighted path searching raises the existing adaptive goal-estimate weight to
+at least 1.75 when ranking search candidates. If its weight is already higher,
+it keeps that weight. Greedy path searching instead ranks candidates by their
+movement cost plus 24 times the raw goal estimate. Both keep movement costs,
+map and footprint safety checks, and the set of accepted goals.
+
+In six focused route cases, the conservative weighted mode reduced expansions
+by approximately 0.7–22% while keeping all six route costs unchanged. Greedy
+mode reduced expansions by approximately 10–27%, but one route cost increased
+by 106%. These cases do not establish a bound on route quality in other maps.
+Use weighted mode for the gentler experiment; greedy remains an explicit
+research variant. The compatible mode remains the default. Either experiment
+can change routes, arrival times, congestion, combat and match outcomes.
 
 Measure each setting separately before combining them. For example:
 
@@ -62,7 +68,7 @@ python3 tools/benchmark_local_ai.py \
   --experimental-math off --experimental-pathfinder compatible
 ```
 
-The native regression check runs all four combinations twice and compares an
+The native regression check runs all six combinations twice and compares an
 additional explicit-off run with the ordinary default run. Add full traces
 when validating a change to these options:
 

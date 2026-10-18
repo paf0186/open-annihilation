@@ -37,7 +37,7 @@ def check_modes(args):
               "Only explicit off settings must agree with the default mode."}
     default = None
     for math_mode in ("off", "hardware"):
-        for pathfinder in ("compatible", "weighted"):
+        for pathfinder in ("compatible", "weighted", "greedy"):
             mode_args = argparse.Namespace(**vars(args), repeats=2, goal_speed=500,
                                            warmup_ticks=18000, experimental_math=math_mode,
                                            experimental_pathfinder=pathfinder)
