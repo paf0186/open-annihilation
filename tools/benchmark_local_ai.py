@@ -76,7 +76,7 @@ def state_valid(state):
     return True
 
 
-def parse_output(output, ticks, seed, map_name=None):
+def parse_output(output, ticks, seed, map_name=None, math_mode="compatible", pathfinder="compatible"):
     """Require complete local AI configuration, progress and final state."""
     records = []
     for line in output.splitlines():
@@ -95,6 +95,8 @@ def parse_output(output, ticks, seed, map_name=None):
             config.get("difficulty") == "hard" and config.get("unit_limit") == 250 and
             integer(config.get("unit_slots"), 501) and config.get("session_rules") == 0 and
             config.get("normal_ticks_per_second") == NORMAL_TICKS_PER_SECOND and
+            config.get("math_mode", "compatible") == math_mode and
+            config.get("pathfinder", "compatible") == pathfinder and
             integer(config.get("start_tick")) and isinstance(config.get("map"), str) and
             bool(config["map"]), "invalid local AI configuration")
     if map_name is not None:
@@ -162,6 +164,12 @@ def run_native(args, folder, trace=False):
                "--preferences-file", str(folder / "preferences.conf")]
     if args.map:
         command += ["--local-ai-map", args.map]
+    experimental_math = getattr(args, "experimental_math", "off")
+    experimental_pathfinder = getattr(args, "experimental_pathfinder", "compatible")
+    if experimental_math != "off" or getattr(args, "explicit_compatible_modes", False):
+        command += ["--experimental-math", experimental_math]
+    if experimental_pathfinder != "compatible" or getattr(args, "explicit_compatible_modes", False):
+        command += ["--experimental-pathfinder", experimental_pathfinder]
     if trace:
         command += ["--trace-digest", str(folder / "world.trace")]
     result = {"command": command, "log": str(folder / "process.log"), "trace_enabled": trace}
@@ -181,7 +189,9 @@ def run_native(args, folder, trace=False):
     if "error" not in result:
         try:
             result.update(parse_output((folder / "process.log").read_text(
-                encoding="utf-8", errors="replace"), args.ticks, args.seed, args.map))
+                encoding="utf-8", errors="replace"), args.ticks, args.seed, args.map,
+                "hardware" if experimental_math == "hardware" else "compatible",
+                experimental_pathfinder))
         except (ValueError, KeyError, TypeError) as error:
             result["error"] = str(error)
     return result
@@ -259,6 +269,8 @@ def benchmark(args, require_activity=False):
     report = {"schema_version": 1, "created_utc": datetime.now(timezone.utc).isoformat(),
               "native": {"path": str(args.native), "sha256": file_hash(args.native)},
               "game_dir": str(args.game_dir), "seed": args.seed, "ticks_limit": args.ticks,
+              "experimental_math": getattr(args, "experimental_math", "off"),
+              "experimental_pathfinder": getattr(args, "experimental_pathfinder", "compatible"),
               "requested_map": args.map, "normal_ticks_per_second": NORMAL_TICKS_PER_SECOND,
               "scratch": str(folder), "runs": [], "errors": [],
               "timing_note": "One match with two live local AI controllers; no networking, drawing "
@@ -310,7 +322,8 @@ def self_test():
              "energy": [100.0, 120.0]}
     config = {"type": "config", "map": "Ashap Plateau", "seed": 123, "requested_ticks": 1800,
               "start_tick": 0, "players": [0, 1], "sides": ["Arm", "Core"], "difficulty": "hard",
-              "unit_limit": 250, "unit_slots": 2501, "session_rules": 0, "normal_ticks_per_second": 30}
+              "unit_limit": 250, "unit_slots": 2501, "session_rules": 0, "normal_ticks_per_second": 30,
+              "math_mode": "compatible", "pathfinder": "compatible"}
     window = {"type": "window", "tick": 1800, "advanced_ticks": 1800, "seconds": 1.5,
               "window_ticks": 1800, "ticks_per_second": 1200, "normal_speed": 40, **state}
     summary = {**window, "type": "summary", "requested_ticks": 1800, "start_tick": 0,
@@ -322,6 +335,31 @@ def self_test():
     records = [config, window, summary]
     parsed = parse_output(output(records), 1800, 123)
     require(parsed["summary"]["digest"] == summary["digest"], "valid report was rejected")
+    for math_mode in ("compatible", "hardware"):
+        for pathfinder in ("compatible", "weighted"):
+            modes = copy.deepcopy(records)
+            modes[0].update(math_mode=math_mode, pathfinder=pathfinder)
+            mode_run = parse_output(output(modes), 1800, 123, math_mode=math_mode,
+                                    pathfinder=pathfinder)
+            require(mode_run["config"]["math_mode"] == math_mode and
+                    mode_run["config"]["pathfinder"] == pathfinder, "requested mode was not retained")
+            if math_mode != "compatible" or pathfinder != "compatible":
+                try:
+                    parse_output(output(modes), 1800, 123)
+                except ValueError:
+                    pass
+                else:
+                    raise ValueError("unexpected experimental mode was accepted")
+    for key in ("math_mode", "pathfinder"):
+        absent = copy.deepcopy(records)
+        del absent[0][key]
+        parse_output(output(absent), 1800, 123)
+        try:
+            parse_output(output(absent), 1800, 123, math_mode="hardware", pathfinder="weighted")
+        except ValueError:
+            pass
+        else:
+            raise ValueError("a missing mode field was accepted for an experimental mode")
     for field, value in (("advanced_ticks", 1799), ("tick", 1801), ("seconds", 0),
                          ("ticks_per_second", float("nan")), ("units", [5]),
                          ("controllers", [False, True]), ("digest", "bad"),
@@ -385,6 +423,10 @@ def main(require_activity=False):
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--seed", type=int, default=123)
     parser.add_argument("--map", help="installed skirmish map name")
+    parser.add_argument("--experimental-math", choices=("off", "hardware"), default="off",
+                        help="select compatible arithmetic or offline hardware rotation arithmetic")
+    parser.add_argument("--experimental-pathfinder", choices=("compatible", "weighted"),
+                        default="compatible", help="select compatible search or offline weighted search")
     parser.add_argument("--warmup-ticks", type=int, default=18000,
                         help="report developed windows starting after this many simulated ticks")
     parser.add_argument("--goal-speed", type=float, default=500)

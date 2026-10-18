@@ -49,6 +49,16 @@ Repeated runs must agree on configuration, all reported workload counters and
 the final digest. A failed correctness check fails the command; missing the
 requested speed target is reported without failing it.
 
+Optional [simulation experiments](simulation-experiments.md) select hardware
+rotation arithmetic or weighted path searching. The runner accepts the same
+`--experimental-math off|hardware` and
+`--experimental-pathfinder compatible|weighted` options as the game. Defaults
+keep compatible behavior. Native configuration records `math_mode` and
+`pathfinder`, and repeated-state comparisons include them. Experimental modes
+must repeat themselves; their state need not match another mode.
+Older binaries that omit these configuration fields are accepted only when
+compatible modes are requested; their binary hashes identify the older build.
+
 For a shorter native regression check:
 
 ```sh
