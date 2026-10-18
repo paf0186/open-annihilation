@@ -190,7 +190,16 @@ void Runtime::benchmark_scene(std::string_view label, std::size_t frames, bool s
         auto base = options_.snapshot;
         base.replace_extension();
         renderer::Surface frame;
-        compose_match_frame(frame);
+        auto* previous_capture = capture_frame_;
+        capture_frame_ = &frame;
+        try {
+            // Full rendering keeps the battlefield in SDL targets, outside the CPU surface.
+            render();
+        } catch (...) {
+            capture_frame_ = previous_capture;
+            throw;
+        }
+        capture_frame_ = previous_capture;
         write_ppm(base.string() + "-" + tag + ".ppm", frame);
     }
 }
@@ -899,6 +908,7 @@ void Runtime::run_headless_frames(std::size_t ticks, uint32_t frames_per_second)
     uint64_t frame = 0;
     // Every frame's drawn battlefield, which no count of drawing threads changes.
     uint64_t frames_digest = kFramesDigestBasis;
+    const auto run_start = BenchClock::now();
     while (match_timing_.tick < ticks) {
         if (frame >= frame_limit)
             throw std::runtime_error("the frame run's match clock stopped stepping");
@@ -964,6 +974,8 @@ void Runtime::run_headless_frames(std::size_t ticks, uint32_t frames_per_second)
             scroll = -scroll;
         ++frame;
     }
+    const double seconds = static_cast<double>(elapsed_ns(run_start)) / 1.0e9;
+    const auto world_digest = frame_run_digest();
     std::printf(
         "frame run: %u frames a second, %llu frames, %u ticks, %zu frames between ticks, "
         "world digest %016llx, frames digest %016llx, drawing threads %u, drawing bands %d\n",
@@ -971,10 +983,20 @@ void Runtime::run_headless_frames(std::size_t ticks, uint32_t frames_per_second)
         static_cast<unsigned long long>(frame),
         match_timing_.tick,
         between_ticks,
-        static_cast<unsigned long long>(frame_run_digest()),
+        static_cast<unsigned long long>(world_digest),
         static_cast<unsigned long long>(frames_digest),
         draw_pool_ ? draw_pool_->threads() : 1U,
         match_models_ ? match_models_->most_bands : 0
+    );
+    std::printf(
+        "render run: %u ticks, %llu frames in %.6f s "
+        "(%.2f ticks/s; %.2f frames/s; logging included) world digest %016llx\n",
+        match_timing_.tick,
+        static_cast<unsigned long long>(frame),
+        seconds,
+        seconds > 0.0 ? static_cast<double>(match_timing_.tick) / seconds : 0.0,
+        seconds > 0.0 ? static_cast<double>(frame) / seconds : 0.0,
+        static_cast<unsigned long long>(world_digest)
     );
     std::fflush(stdout);
     if (!options_.snapshot.empty())
@@ -987,21 +1009,34 @@ void Runtime::run_headless_match(std::size_t ticks) {
     int64_t window_ns = 0;
     int64_t worst_ns = 0;
     std::size_t window_ticks = 0;
+    std::size_t frames = 0;
+    const auto frame_limit =
+        options_.max_frames_per_second_given ? options_.max_frames_per_second : 0;
+    const auto frame_period =
+        std::chrono::nanoseconds(frame_limit == 0 ? 0 : 1'000'000'000ULL / frame_limit);
     const auto run_start = BenchClock::now();
+    auto next_frame = run_start;
     for (std::size_t tick = 1; tick <= ticks; ++tick) {
         const auto start = BenchClock::now();
         try {
             step_match_simulation();
         } catch (const std::exception& error) {
-            if (options_.simulation_only)
+            if (options_.simulation_only || frame_limit != 0)
                 throw;
             report_match_tick_error(error.what());
         }
         if constexpr (self_checks_built)
             if (options_.reclaim_check)
                 tick_reclaim_check();
-        if (!options_.simulation_only)
-            rebuild_surface();
+        if (!options_.simulation_only) {
+            const auto frame_start = BenchClock::now();
+            if (frame_limit == 0 || frame_start >= next_frame) {
+                rebuild_surface();
+                ++frames;
+                // Leave time to simulate even when drawing exceeds the display interval.
+                next_frame = BenchClock::now() + frame_period;
+            }
+        }
         const auto spent = elapsed_ns(start);
         window_ns += spent;
         ++window_ticks;
@@ -1039,7 +1074,7 @@ void Runtime::run_headless_match(std::size_t ticks) {
         if (options_.reclaim_check)
             finish_reclaim_check();
     if (!options_.snapshot.empty()) {
-        if (options_.simulation_only)
+        if (options_.simulation_only || frame_limit != 0)
             rebuild_surface();
         write_ppm(options_.snapshot, surface_);
     }
@@ -1050,6 +1085,17 @@ void Runtime::run_headless_match(std::size_t ticks) {
             ticks,
             seconds,
             seconds > 0.0 ? static_cast<double>(ticks) / seconds : 0.0,
+            static_cast<unsigned long long>(frame_run_digest())
+        );
+    else
+        std::printf(
+            "render run: %zu ticks, %zu frames in %.6f s "
+            "(%.2f ticks/s; %.2f frames/s; logging included) world digest %016llx\n",
+            ticks,
+            frames,
+            seconds,
+            seconds > 0.0 ? static_cast<double>(ticks) / seconds : 0.0,
+            seconds > 0.0 ? static_cast<double>(frames) / seconds : 0.0,
             static_cast<unsigned long long>(frame_run_digest())
         );
     print_memory_status();

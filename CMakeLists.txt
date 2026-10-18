@@ -3410,6 +3410,8 @@ if(BUILD_TESTING)
     set_tests_properties(training-client-selftest PROPERTIES TIMEOUT 120)
     add_test(NAME ai-benchmark-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/benchmark_ai_matches.py --self-test)
+    add_test(NAME rendering-benchmark-selftest COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tools/benchmark_rendering.py --self-test)
     add_test(NAME branding-icons COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/make_icons.py --check)
     set_tests_properties(branding-icons PROPERTIES TIMEOUT 60)
     # The macOS and iOS bundles declare the .oamod mod package as the game's own type and open

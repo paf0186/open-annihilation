@@ -1657,10 +1657,10 @@ void write_startup_line(std::string_view text) {
             "--headless-check"
         );
     if (result.force_capable && !result.check_render_tiers && !result.check_build_preview &&
-        !result.check_engine_settings && !result.check_kill_board)
+        !result.check_engine_settings && !result.check_kill_board && !result.benchmark_frames)
         throw std::runtime_error(
             "--force-capable is accepted only with --check-render-tiers, "
-            "--check-build-preview, --check-engine-settings and --check-kill-board"
+            "--check-build-preview, --check-engine-settings, --check-kill-board and --benchmark"
         );
     if (result.render_fault && !result.check_renderer_ladder)
         throw std::runtime_error("--render-fault needs --check-renderer-ladder");

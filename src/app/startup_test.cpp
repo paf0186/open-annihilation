@@ -1099,6 +1099,10 @@ int main() {
     );
     expect(!plain.force_capable, "no --force-capable, none given");
     expect(
+        parse({"--benchmark", "2", "--force-capable"}).force_capable,
+        "the drawing benchmark can exercise a software renderer as capable"
+    );
+    expect(
         parse({"--check-engine-settings", "--force-capable"}).force_capable,
         "--force-capable goes with --check-engine-settings"
     );
@@ -1111,12 +1115,14 @@ int main() {
         "--force-capable goes with --check-build-preview"
     );
     expect(
-        rejection({"--force-capable"}) ==
-                "--force-capable is accepted only with --check-render-tiers, "
-                "--check-build-preview, --check-engine-settings and --check-kill-board" &&
+        rejection(
+            {"--force-capable"}
+        ) == "--force-capable is accepted only with --check-render-tiers, "
+             "--check-build-preview, --check-engine-settings, --check-kill-board and --benchmark" &&
             rejection({"--force-capable", "--check-navigation"}) ==
                 "--force-capable is accepted only with --check-render-tiers, "
-                "--check-build-preview, --check-engine-settings and --check-kill-board",
+                "--check-build-preview, --check-engine-settings, --check-kill-board and "
+                "--benchmark",
         "--force-capable is refused without a check that takes it"
     );
     // A made-up monitor for checks: kept as named, for unattended runs only.
@@ -1614,13 +1620,13 @@ int main() {
     expect(
         rejection({"--force-capable"}) ==
             "--force-capable is accepted only with --check-render-tiers, "
-            "--check-build-preview, --check-engine-settings and --check-kill-board",
+            "--check-build-preview, --check-engine-settings, --check-kill-board and --benchmark",
         "--force-capable alone is refused"
     );
     expect(
         rejection({"--check-match-layers", "--force-capable"}) ==
             "--force-capable is accepted only with --check-render-tiers, "
-            "--check-build-preview, --check-engine-settings and --check-kill-board",
+            "--check-build-preview, --check-engine-settings, --check-kill-board and --benchmark",
         "--force-capable with another check is refused"
     );
     // --native-density opens the window at the display's own density for

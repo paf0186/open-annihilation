@@ -14,6 +14,7 @@ played headless many ways that change only what is drawn, when and how:
   never drawn;
 - drawn once after every tick without the match clock (no --frame-rate);
 - simulated without per-tick drawing, with and without a final snapshot;
+- drawn at most 30 or 60 times per wall-clock second while simulation runs freely;
 - drawn at zoom 0.5 and 4;
 - drawn with enhanced anti-aliasing at 4x.
 
@@ -67,6 +68,7 @@ TRACE_TICK_BYTES = TRACE_RECORD_BYTES * (1 + TRACE_SECTIONS)
 RUN_LINE = re.compile(r"frame run: \d+ frames a second, \d+ frames, (\d+) ticks, .* "
                       r"world digest ([0-9a-f]{16})")
 SIMULATION_LINE = re.compile(r"simulation run: (\d+) ticks .* world digest ([0-9a-f]{16})")
+RENDER_LINE = re.compile(r"render run: (\d+) ticks, \d+ frames .* world digest ([0-9a-f]{16})")
 
 # Each run's name, extra options and preference values. The first is the
 # reference the others are held to.
@@ -80,6 +82,8 @@ RUNS = (
     ("drawn-144", ("--frame-rate", "144"), {}),
     ("slow-frames-10", ("--frame-rate", "10"), {}),
     ("every-tick", (), {}),
+    ("wall-clock-30", ("--max-fps", "30"), {}),
+    ("wall-clock-60", ("--max-fps", "60", "--snapshot", "wall-clock.ppm"), {}),
     ("simulation-only", ("--simulation-only",), {}),
     ("simulation-snapshot", ("--simulation-only", "--snapshot", "simulation.ppm"), {}),
     ("zoom-half", ("--frame-rate", "30", "--zoom", "0.5"), {}),
@@ -112,7 +116,9 @@ def play(native, game_dir, workdir, name, options, preferences):
         snapshot = workdir / options[options.index("--snapshot") + 1]
         if not snapshot.is_file() or snapshot.stat().st_size == 0:
             raise SystemExit(f"{name}: no final snapshot")
-    match = simulation or RUN_LINE.search(result.stdout)
+    match = simulation or RUN_LINE.search(result.stdout) or RENDER_LINE.search(result.stdout)
+    if "--max-fps" in options and match is None:
+        raise SystemExit(f"{name}: no rendered throughput report")
     ticks, digest = (int(match[1]), match[2]) if match else (TICKS, None)
     return ticks, digest, trace.read_bytes()
 

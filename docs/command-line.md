@@ -184,7 +184,7 @@ finds it at the start of the output. The version line is the last line.
 | `--mute` | Plays no sound. |
 | `--first-run` | Shows the welcome at the first main menu again, even when it is done ([first run](first-run.md)). |
 | `--resolution WxH` | Opens the window at that size, for this run only, such as `--resolution 1280x720`. |
-| `--max-fps N` | The most frames a second, from 30 through 1000, or 0 for no limit, for this run. |
+| `--max-fps N` | The most frames per wall-clock second, from 30 through 1000, or 0 for no limit, for this run. For a skirmish with `--headless-check --match-ticks` and without `--frame-rate`, limits drawing while simulation advances without waiting. |
 | `--hardware-acceleration[=off\|basic\|full]` | Sets Hardware acceleration for this run; alone it is `full`. |
 | `--no-hardware-acceleration` | Turns Hardware acceleration off for this run. |
 | `--native-density` | Opens the window at the display's own pixel density for this run. |
@@ -318,7 +318,7 @@ Network play's own checks, the last rows, are in every build.
 | `--frames N` | Ends the run after N frames of the main menu's loop. |
 | `--snapshot PATH.ppm` | Writes a picture of what a headless run ends on, such as the main menu, to `PATH`; a check writes its own pictures beside it. |
 | `--display-modes MODES` | A made-up monitor for a check on SDL's dummy video driver: `WIDTHxHEIGHT[@RATE][/DENSITY]` modes, separated by commas, or `none`. |
-| `--force-capable` | Counts the renderer as one the graphics card can scale frames on, for `--check-render-tiers`, `--check-build-preview`, `--check-engine-settings` and `--check-kill-board` only. |
+| `--force-capable` | Counts the renderer as one the graphics card can scale frames on, for `--check-render-tiers`, `--check-build-preview`, `--check-engine-settings`, `--check-kill-board` and `--benchmark` only. A forced benchmark still runs on the selected renderer; a software renderer remains software. |
 | `--check-navigation [GROUP]` | Walks the menus and a skirmish through their keys and buttons: every group, or one of `screens`, `orders`, `outcomes`, `zoom`, `zoom-1366x768`, `zoom-1920x1080`, `zoom-2560x1440` and `campaign`. |
 | `--check-match-dialogs` | Opens the help dialog over a live match, then the briefing and the in-game dialogs, in the language the preferences file names, such as an installed pack's. |
 | `--check-match-layers` | Checks the presented match frame against the processor's composition. |
@@ -394,11 +394,11 @@ Network play's own checks, the last rows, are in every build.
 | `--check-interpolation` | Checks the frames drawn between ticks, and the frames at whole ticks with Smooth motion Off. |
 | `--check-unit-playout` | Checks another machine's units move evenly. |
 | `--reclaim-check` | Has the commander reclaim the nearest feature in a headless skirmish. |
+| `--net-ai-benchmark TICKS` | Runs two opposing hard computer players headless without pacing or drawn frames, reporting loop speed; both human slots watch. Use `--net-record` to keep the game ([AI performance](ai-performance.md)). |
 | `--net-loopback-check TICKS` | Hosts and joins a match in one process over 127.0.0.1 and compares both worlds after `TICKS` ticks. |
 | `--net-loopback-watcher` | The loopback check's joiner watches. |
 | `--net-loopback-computer` | The loopback check's host seats a computer player. |
 | `--net-loopback-each-ai` | The loopback check's host and joiner each seat a computer player. |
-| `--net-ai-benchmark TICKS` | Runs two opposing hard computer players headless without pacing or drawn frames, reporting loop speed; both human slots watch. Use `--net-record` to keep the game ([AI performance](ai-performance.md)). |
 | `--check-host-not-found` | Checks a joiner whose host is never found. |
 | `--check-opened-launch start\|menu FILE` | Opens `FILE` as the system opens a launch file: as the game starts, before its window opens, or once the main menu has settled. |
 | `--check-recording-hook` | Checks the game declines bytes that are no recording and refuses a cut one. |
