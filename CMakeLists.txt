@@ -3420,7 +3420,7 @@ if(BUILD_TESTING)
     add_test(NAME training-client-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_training_client.py)
     set_tests_properties(training-client-selftest PROPERTIES TIMEOUT 120)
-    add_test(NAME simulation-experiments-selftest COMMAND ${Python3_EXECUTABLE}
+    add_test(NAME native-simulation-experiments-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_native_simulation_experiments.py --self-test)
     add_test(NAME local-ai-benchmark-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/benchmark_local_ai.py --self-test)
