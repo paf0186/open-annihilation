@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "oa/sim/ground_orders/search_worker.hpp"
-#include "oa/sim/ground_orders/experimental.hpp"
 #include "oa/sim/ground_orders/search_trace.hpp"
 
 #include <bit>
@@ -10,34 +9,6 @@
 
 namespace oa::sim::ground_orders {
 namespace {
-
-ExperimentalPathfinder pathfinder_mode = ExperimentalPathfinder::compatible;
-
-/// Selects heap priority without changing the compatible goal heuristic.
-///
-/// @param mode priority selected before the search starts
-/// @param compatible_scale adaptive heuristic weight in 16.16
-/// @return priority weight in 16.16
-int32_t priority_scale(ExperimentalPathfinder mode, int32_t compatible_scale) noexcept {
-    switch (mode) {
-    case ExperimentalPathfinder::weighted:
-        return compatible_scale < experimental_weighted_priority_floor
-                   ? experimental_weighted_priority_floor
-                   : compatible_scale;
-    case ExperimentalPathfinder::compatible:
-        return compatible_scale;
-    }
-    return compatible_scale;
-}
-
-/// Scales a goal cost, dropping the low sixteen product bits.
-///
-/// @param cost goal distance cost
-/// @param scale heuristic weight in 16.16
-/// @return the signed scaled cost
-int32_t scaled_goal_cost(int32_t cost, int32_t scale) noexcept {
-    return static_cast<int32_t>((int64_t(cost) * int64_t(scale)) >> 16);
-}
 
 int32_t wrap_neg(int32_t value) noexcept {
     return static_cast<int32_t>(0u - static_cast<uint32_t>(value));
@@ -131,14 +102,6 @@ void clear_dirty_cells(std::span<SearchMapCell> cells, std::span<uint32_t> dirty
 }
 
 } // namespace
-
-void set_experimental_pathfinder(ExperimentalPathfinder mode) noexcept {
-    pathfinder_mode = mode;
-}
-
-ExperimentalPathfinder experimental_pathfinder() noexcept {
-    return pathfinder_mode;
-}
 
 void SearchCellGrid::allocate(int32_t map_width, int32_t map_height) {
     width = map_width;
@@ -319,7 +282,8 @@ uint32_t SearchWorker::classify(int32_t x, int32_t z) const {
 
 int32_t SearchWorker::heuristic(int32_t x, int32_t z) const {
     const auto cost = goal_cost(*record_.goal, x, z);
-    return scaled_goal_cost(cost, heuristic_scale_);
+    const auto product = int64_t(cost) * int64_t(heuristic_scale_);
+    return static_cast<int32_t>(product >> 16);
 }
 
 uint32_t SearchWorker::expand_best() {
@@ -340,7 +304,6 @@ uint32_t SearchWorker::expand_best() {
     const auto straight_run = static_cast<int16_t>(parent_run + 1);
     const auto early_turn_penalty =
         parent_run < search_early_run_limit ? search_early_turn_penalty : 0;
-    const auto expansion_priority_scale = priority_scale(pathfinder_mode, heuristic_scale_);
     auto expand_neighbor = [&](uint32_t relative_turn) {
         const auto direction = (static_cast<uint32_t>(cell.predecessor) + relative_turn) & 7u;
         const auto x = parent_x + search_direction_x[direction];
@@ -359,8 +322,7 @@ uint32_t SearchWorker::expand_best() {
                 cell.flags = static_cast<uint8_t>(cell.flags | 3u);
                 return;
             }
-            const auto cost = goal_cost(*record_.goal, x, z);
-            const auto estimate = scaled_goal_cost(cost, heuristic_scale_);
+            const auto estimate = heuristic(x, z);
             if (estimate > threshold_)
                 cell.flags = static_cast<uint8_t>(cell.flags | 1u);
             else
@@ -374,10 +336,7 @@ uint32_t SearchWorker::expand_best() {
             const auto run = relative_turn == 0 ? straight_run : int16_t{1};
             if (relative_turn != 0)
                 g += early_turn_penalty;
-            const auto priority = expansion_priority_scale == heuristic_scale_
-                                      ? estimate
-                                      : scaled_goal_cost(cost, expansion_priority_scale);
-            const auto f = g + priority;
+            const auto f = g + estimate;
             const auto handle = heap_.insert(
                 pack_node(static_cast<int16_t>(x), static_cast<int16_t>(z), g, f, extra, run)
             );
@@ -641,15 +600,8 @@ SearchAdvance SearchWorker::begin(
     start_cell.predecessor = heading_direction(unit.heading);
     // The start node's extra (payload word 3) is zero; it is never read, because
     // the start cell is closed on first pop and closed cells are not reopened.
-    const auto start_priority_scale = priority_scale(pathfinder_mode, heuristic_scale_);
-    const auto start_priority =
-        start_priority_scale == heuristic_scale_
-            ? start_cost
-            : scaled_goal_cost(
-                  goal_cost(*record_.goal, start_[0], start_[1]), start_priority_scale
-              );
     const auto handle =
-        heap_.insert(pack_node(start_[0], start_[1], 0, start_priority, 0, search_start_run));
+        heap_.insert(pack_node(start_[0], start_[1], 0, start_cost, 0, search_start_run));
     start_cell.handle = handle;
     fan_ = search_initial_fan;
     return SearchAdvance::in_progress;
