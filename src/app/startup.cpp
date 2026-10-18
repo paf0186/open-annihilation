@@ -305,6 +305,7 @@ void check_game_files_options(Options& options) {
         {options.check_library_content, "--check-library-content"},
         {!options.open_files.empty(), "--open"},
         {options.check_renderer_ladder, "--check-renderer-ladder"},
+        {options.check_offline_speed, "--check-offline-speed"},
         {options.check_briefing_narration, "--check-briefing-narration"},
         {options.check_match_layers, "--check-match-layers"},
         {options.check_render_tiers, "--check-render-tiers"},
@@ -583,6 +584,7 @@ void check_director_options(Options& options) {
         {options.check_library_content, "--check-library-content"},
         {!options.open_files.empty(), "--open"},
         {options.check_renderer_ladder, "--check-renderer-ladder"},
+        {options.check_offline_speed, "--check-offline-speed"},
     };
     for (const auto& [given, name] : refused)
         if (given)
@@ -668,6 +670,7 @@ void refuse_left_out_self_checks([[maybe_unused]] const Options& options) {
             {options.check_library_map_previews, "--check-library-map-previews"},
             {options.check_library_content, "--check-library-content"},
             {options.check_renderer_ladder, "--check-renderer-ladder"},
+            {options.check_offline_speed, "--check-offline-speed"},
         };
         for (const auto& [given, name] : checks)
             if (given)
@@ -817,6 +820,7 @@ constexpr FlagOption kFlagOptions[] = {
     {"--check-library-map-previews", &Options::check_library_map_previews},
     {"--check-library-content", &Options::check_library_content},
     {"--check-renderer-ladder", &Options::check_renderer_ladder},
+    {"--check-offline-speed", &Options::check_offline_speed},
     {"--check-briefing-narration", &Options::check_briefing_narration},
     {"--check-match-layers", &Options::check_match_layers},
     {"--check-render-tiers", &Options::check_render_tiers},
@@ -1036,6 +1040,13 @@ take_frame_option(std::string_view argument, ArgumentCursor& cursor, Options& op
 take_match_option(std::string_view argument, ArgumentCursor& cursor, Options& options) {
     if (argument == "--match-ticks") {
         options.match_ticks = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--offline-speed") {
+        const auto value = parse_count(option_value(cursor));
+        if (value < 1 || value > 10000)
+            throw std::runtime_error("--offline-speed expects a multiplier from 1 through 10000");
+        options.offline_speed = static_cast<uint32_t>(value);
         return true;
     }
     if (argument == "--experimental-math") {
@@ -1474,7 +1485,7 @@ void write_startup_line(std::string_view text) {
                      "[--trace-input] "
                   << extension_text(extension, ExtensionText::usage_checks, "")
                   << "[--debug-order-lines] "
-                     "[--max-fps N] "
+                     "[--max-fps N] [--offline-speed MULTIPLIER] "
                      "[--hardware-acceleration[=off|basic|full] | --no-hardware-acceleration] "
                      "[--native-density] [--display-modes MODES] "
                      "[--experimental-math off|hardware] "
@@ -1594,6 +1605,16 @@ void write_startup_line(std::string_view text) {
         throw std::runtime_error("--local-ai-benchmark cannot be combined with another run mode");
     if (!result.local_ai_ticks && !result.local_ai_map.empty())
         throw std::runtime_error("--local-ai-map needs --local-ai-benchmark");
+    if (result.check_offline_speed) {
+        result.skip_intro = true;
+        result.mute = true;
+        result.seed = 123;
+        result.offline_speed = 1000;
+    }
+    if (result.offline_speed &&
+        (result.local_ai_ticks || result.training_worker || result.simulation_only ||
+         result.frame_rate || !result.render_script.empty() || !result.capture_video.empty()))
+        throw std::runtime_error("--offline-speed needs a live offline game");
     if (result.experimental_math &&
         !(result.local_ai_ticks || result.training_worker ||
           (result.headless_check && result.simulation_only && result.match_ticks)))
@@ -1737,11 +1758,14 @@ void write_startup_line(std::string_view text) {
         result.check_unit_playout || result.check_paused_save || result.check_simulation_hash ||
         result.check_zoom_memory || result.check_map_packs || result.check_map_browser ||
         result.check_map_pack_lists;
+    if (result.offline_speed && result.fixed_clock)
+        throw std::runtime_error("--offline-speed needs a live offline game");
     // A capture and a showcase need the application's own loop and window,
     // which checks and benchmarks do not run.
-    const bool check_run = result.fixed_clock || result.check_navigation ||
-                           result.check_zoom_memory || result.check_multiplayer_menu ||
-                           result.check_briefing_narration || result.benchmark_frames;
+    const bool check_run = result.check_offline_speed || result.fixed_clock ||
+                           result.check_navigation || result.check_zoom_memory ||
+                           result.check_multiplayer_menu || result.check_briefing_narration ||
+                           result.benchmark_frames;
 #if OA_PROCESS_SPAWNING == 0
     // The capture and the director's encoder run the ffmpeg program, which a
     // build without OA_PROCESS_SPAWNING cannot start. A render with encoding
@@ -1770,9 +1794,10 @@ void write_startup_line(std::string_view text) {
     // A showcase plays its mission from the same random state on every run.
     if (result.showcase != Showcase::none && !result.seed)
         result.seed = kFixedRandomSeed;
-    result.unattended = result.fixed_clock || result.check_navigation ||
-                        result.check_multiplayer_menu || result.check_briefing_narration ||
-                        result.benchmark_frames || result.frame_limit || !result.snapshot.empty() ||
+    result.unattended = result.check_offline_speed || result.fixed_clock ||
+                        result.check_navigation || result.check_multiplayer_menu ||
+                        result.check_briefing_narration || result.benchmark_frames ||
+                        result.frame_limit || !result.snapshot.empty() ||
                         result.showcase != Showcase::none;
     if ((extension_effects & option_effect::unattended) != 0)
         result.unattended = true;

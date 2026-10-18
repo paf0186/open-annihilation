@@ -1614,6 +1614,9 @@ void Runtime::finish_saved_game_start(bool restored_players) {
     oa::World& world = match_->state();
     if (restored_players)
         load_timing(world.game, match_timing_);
+    offline_clock_ = {};
+    offline_report_ns_ = 0;
+    offline_report_tick_ = 0;
     // A loaded game starts running, whatever the save holds in the pause bit
     // of Game.sim_run_flags; the file keeps the bit as it was written. Only
     // the Pause key lifts that bit, and closing the in-game menu does not,

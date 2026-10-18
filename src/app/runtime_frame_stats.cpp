@@ -235,10 +235,49 @@ void Runtime::step_match_frame() {
         oa::base::game_loop::scaled_clock(now_ms, match_clock_scale()), match_timing_.previous_clock
     );
     const bool fixed = options_.fixed_clock && !frame_run_clock_ns_;
-    if (stepped && !fixed && behind)
+    if (stepped && !fixed && behind && !offline_speed_active())
         stepped = false;
+    if (!stepped && options_.offline_speed)
+        offline_clock_ = {};
+    if (stepped && options_.offline_speed &&
+        (current_extension_state() & (extension_state::multiplayer | extension_state::shared_match |
+                                      extension_state::replay)) != 0) {
+        report_match_tick_error("Offline acceleration cannot run network games or recordings");
+        stepped = false;
+    }
+    if (stepped && offline_speed_active() && match_->state().game.capture_enabled > 0) {
+        report_match_tick_error("Offline acceleration cannot run movie capture");
+        stepped = false;
+    }
     if (stepped)
         advance_match_clock(now_ms);
+    if (offline_speed_active() && sdl_.window != nullptr) {
+        const uint64_t now = frame_pacing::steady_now_ns();
+        if (match_timing_.tick < offline_report_tick_) {
+            offline_report_ns_ = 0;
+            offline_clock_ = {};
+        }
+        if (offline_report_ns_ == 0 ||
+            now - offline_report_ns_ >= frame_pacing::kNanosecondsPerSecond) {
+            const double actual =
+                offline_report_ns_ == 0
+                    ? 0.0
+                    : static_cast<double>(match_timing_.tick - offline_report_tick_) *
+                          static_cast<double>(frame_pacing::kNanosecondsPerSecond) /
+                          (30.0 * static_cast<double>(now - offline_report_ns_));
+            char title[160]{};
+            std::snprintf(
+                title,
+                sizeof(title),
+                "Open Annihilation | Offline target %ux | Actual %.1fx | +/- target, Pause pauses",
+                offline_multiplier_ == 0 ? *options_.offline_speed : offline_multiplier_,
+                actual
+            );
+            SDL_SetWindowTitle(sdl_.window, title);
+            offline_report_ns_ = now;
+            offline_report_tick_ = match_timing_.tick;
+        }
+    }
     present_frame_between_ticks(stepped, ticks_before);
     place_tracking_camera();
 }
@@ -251,8 +290,8 @@ void Runtime::present_frame_between_ticks(bool stepped, uint32_t ticks_before) {
     // between them; a --frame-rate run's clock does not. Smooth motion Off
     // draws whole ticks too, as the game drew them: the frames between two
     // ticks repeat the latest tick's picture, at the same frame rate.
-    bool whole =
-        !stepped || !match_ || (options_.fixed_clock && !frame_run_clock_ns_) || !smooth_motion();
+    bool whole = offline_speed_active() || !stepped || !match_ ||
+                 (options_.fixed_clock && !frame_run_clock_ns_) || !smooth_motion();
     if (match_) {
         const oa::Game& game = match_->state().game;
         // A film frame is saved as drawn, and shows the whole tick.
@@ -286,6 +325,8 @@ void Runtime::pace_next_frame(bool& running) {
                             PadAccess::input_held(*this);
     activity.unattended = options_.unattended;
     paced_frames_per_second_ = paced_frame_rate(options_.max_frames_per_second, activity);
+    if (offline_speed_active())
+        paced_frames_per_second_ = capped_frame_rate(paced_frames_per_second_, 60);
     // While the renderer waits for the display, the loop keeps just below
     // the display's rate, so that each present finds the display ready.
     if (vertical_sync_in_effect_)

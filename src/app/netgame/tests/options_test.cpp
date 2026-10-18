@@ -147,6 +147,12 @@ int main() {
              {"--launch", "-"},
              {"-c", "-"}
          }) {
+        std::vector<const char*> offline{"--offline-speed", "1000"};
+        offline.insert(offline.end(), run.begin(), run.end());
+        expect(
+            rejection(offline) == "--offline-speed cannot use network run modes",
+            "offline speed refuses network and recording modes"
+        );
         std::vector<const char*> arguments{"--training-worker"};
         arguments.insert(arguments.end(), run.begin(), run.end());
         expect(

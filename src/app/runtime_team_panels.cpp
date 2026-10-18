@@ -387,6 +387,15 @@ void Runtime::share_bar_moved(std::size_t gadget) {
     // The profile's game speed slider asks for its speed, as the speed keys
     // do, when it moved off the speed asked for.
     if (entry != nullptr && name == kShareSpeedSlider && match_) {
+        if (offline_speed_active()) {
+            // The offline target owns pacing; zero on this slider returns to 1x.
+            offline_multiplier_ =
+                uint32_t{1} << static_cast<uint32_t>(std::clamp<int16_t>(entry->bar.knob, 0, 14));
+            offline_multiplier_ = std::min(offline_multiplier_, frame_pacing::kHighestOfflineSpeed);
+            offline_clock_ = {};
+            status_ = "Offline target " + std::to_string(offline_multiplier_) + "x";
+            return;
+        }
         auto& world = match_->state();
         const auto speed = static_cast<uint16_t>(entry->bar.knob);
         if (speed == world.game.requested_speed)
@@ -628,9 +637,24 @@ void Runtime::prepare_share_dialog_extras() {
             bar.knob_size = 1;
             bar.range = kShareSpeedStops;
             bar.maximum = kShareSpeedStops;
-            bar.knob = static_cast<int16_t>(
-                std::clamp<int32_t>(world.game.requested_speed, 0, kShareSpeedStops)
-            );
+            if (offline_speed_active()) {
+                uint32_t target =
+                    offline_multiplier_ == 0 ? *options_.offline_speed : offline_multiplier_;
+                int16_t position = 0;
+                while (target > 1) {
+                    target /= 2;
+                    ++position;
+                }
+                if ((offline_multiplier_ == 0 ? *options_.offline_speed : offline_multiplier_) ==
+                    frame_pacing::kHighestOfflineSpeed)
+                    position = 14;
+                bar.maximum = 14;
+                bar.range = 14;
+                bar.knob = position;
+            } else
+                bar.knob = static_cast<int16_t>(
+                    std::clamp<int32_t>(world.game.requested_speed, 0, kShareSpeedStops)
+                );
             auto& fields = std::get<oa::ui::gui_layout::ScrollBarFields>(
                 match_hud_->layout.gadgets[entry.gadget].fields
             );

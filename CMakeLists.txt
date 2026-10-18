@@ -2179,6 +2179,12 @@ if(OA_BUILD_PLATFORM)
       # every driver but software to refuse at start.
       set(oa_renderer_ladder_dir "${CMAKE_CURRENT_BINARY_DIR}/native-checks/renderer-ladder")
       file(MAKE_DIRECTORY "${oa_renderer_ladder_dir}")
+      file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/native-checks/offline-speed")
+      add_test(NAME native-offline-speed COMMAND oa-game --game-dir "${OA_GAME_DIR}"
+        --skip-intro --mute --check-offline-speed
+        --preferences-file "${CMAKE_CURRENT_BINARY_DIR}/native-checks/offline-speed/preferences.conf")
+      set_tests_properties(native-offline-speed PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT}
+        ENVIRONMENT "SDL_VIDEO_DRIVER=dummy;SDL_AUDIO_DRIVER=dummy;SDL_RENDER_DRIVER=software")
       add_test(NAME native-renderer-ladder COMMAND oa-game --game-dir "${OA_GAME_DIR}"
         --skip-intro --mute --check-renderer-ladder
         --preferences-file "${oa_renderer_ladder_dir}/renderer-ladder.conf")

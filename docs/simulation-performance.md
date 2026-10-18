@@ -83,3 +83,30 @@ Compare repeated runs, retain their spread, and check identical per-tick state
 traces against the previous executable before attributing speed changes to an
 optimization. Keep installed data, recordings, captures and profile files out
 of Git.
+
+## Accelerated offline play
+
+Launch `./run.sh --offline-speed 1000 --max-fps 60` to request 1000 times
+normal simulation speed in a live offline skirmish or campaign. Targets from
+1 through 10000 are accepted; actual speed depends on the battle and processor.
+The window title shows target and achieved speed, and `+stats` shows ticks per
+wall-clock second. Plus doubles the target, minus halves it down to 1x, and
+Pause pauses. The game menu holds the simulation without accumulating work.
+
+Simulation still advances every ordinary tick. The application returns to
+input and drawing after at most 12 ms of simulation work, except that a single
+slow tick must finish. Drawing stays at most 60 wall-clock frames per second,
+or the lower configured cap. Large wall-clock delays do not accumulate an
+unbounded backlog. Computer-player timers use simulation time, and timed map
+units are checked after every accelerated tick.
+
+This option controls pacing separately from the saved game's ordinary speed.
+The GAME speed slider is locked while it is active; an existing game-speed
+slider in SHARE, when a profile supplies one, selects powers of two instead.
+Resource-sharing sliders retain their normal meaning. The target is not saved
+or transmitted. Network games, replay playback, movie capture and fixed-clock
+run modes cannot use this option. Omit it to retain the ordinary speed controls.
+
+`--check-offline-speed` runs a bounded rendered check of one-tick versus batched
+trajectories, wall-clock acceleration beyond five ticks per frame, Pause input,
+speed controls and unchanged canonical speed fields.

@@ -1426,6 +1426,106 @@ int Runtime::run_headless_campaign(std::size_t ticks) {
     return failed_ticks == 0 ? 0 : 1;
 }
 
+int Runtime::check_offline_speed() {
+    const auto require = [](bool condition, const char* message) {
+        if (!condition)
+            throw std::runtime_error(message);
+    };
+    require(offline_speed_active(), "offline speed check needs a live clock");
+    require(sdl_.window != nullptr, "offline speed check needs a rendered window");
+    SDL_SetWindowSize(sdl_.window, 640, 480);
+    SDL_SyncWindow(sdl_.window);
+    options_.match_width = 640;
+    options_.match_height = 480;
+    std::array<uint64_t, 20> checkpoints{};
+    prepare_headless_match();
+    const uint16_t requested = match_->state().game.requested_speed;
+    const uint16_t current = match_->state().game.current_speed;
+    for (std::size_t checkpoint = 0; checkpoint < checkpoints.size(); ++checkpoint) {
+        for (uint32_t tick = 0; tick < 30; ++tick) {
+            match_timing_.pending_steps = 1;
+            run_pending_match_ticks(false);
+        }
+        checkpoints[checkpoint] = frame_run_digest();
+    }
+    leave_match();
+    load(Screen::main_menu);
+    prepare_headless_match();
+    offline_clock_ = {};
+    offline_multiplier_ = 1000;
+    uint32_t largest_batch = 0;
+    for (std::size_t checkpoint = 0; checkpoint < checkpoints.size(); ++checkpoint) {
+        const uint32_t target = static_cast<uint32_t>((checkpoint + 1) * 30);
+        while (match_timing_.tick < target) {
+            const uint32_t before = match_timing_.tick;
+            match_timing_.pending_steps = static_cast<int32_t>(target - before);
+            run_pending_match_ticks(true);
+            largest_batch = std::max(largest_batch, match_timing_.tick - before);
+            require(!match_tick_blocked_, "offline batch encountered a simulation fault");
+        }
+        require(
+            frame_run_digest() == checkpoints[checkpoint],
+            "offline batching changed tick trajectory"
+        );
+        rebuild_surface();
+        render();
+        require(!match_world_cpu_.rgb.empty(), "offline check drew no battlefield");
+        require(
+            std::any_of(
+                match_world_cpu_.rgb.begin(),
+                match_world_cpu_.rgb.end(),
+                [first = match_world_cpu_.rgb.front()](uint8_t pixel) { return pixel != first; }
+            ),
+            "offline battlefield was a blank image"
+        );
+    }
+    require(largest_batch > 5, "offline check did not exceed the former five-tick cap");
+    bool running = true;
+    SDL_Event pause{};
+    pause.type = SDL_EVENT_KEY_DOWN;
+    pause.key.key = SDLK_PAUSE;
+    pause.key.scancode = SDL_SCANCODE_PAUSE;
+    dispatch_event(pause, running);
+    const uint32_t paused_tick = match_timing_.tick;
+    step_match_frame();
+    require(match_timing_.tick == paused_tick, "Pause advanced offline simulation");
+    dispatch_event(pause, running);
+    step_match_frame();
+    require(match_timing_.tick == paused_tick, "resume accumulated paused clock debt");
+    // Real wall-clock scheduling and drawing, rather than just injected batches.
+    uint32_t real_batch = 0;
+    for (uint32_t frame = 0; frame < 8; ++frame) {
+        SDL_Delay(16);
+        const uint32_t before = match_timing_.tick;
+        step_match_frame();
+        real_batch = std::max(real_batch, match_timing_.tick - before);
+        rebuild_surface();
+        render();
+    }
+    require(real_batch > 5, "wall-clock acceleration retained the old tick cap");
+    while (offline_multiplier_ > 1)
+        adjust_game_speed(-1);
+    require(offline_multiplier_ == 1, "minus did not return to normal speed");
+    adjust_game_speed(1);
+    require(offline_multiplier_ == 2, "plus did not double the offline target");
+    require(
+        match_->state().game.requested_speed == requested &&
+            match_->state().game.current_speed == current &&
+            match_timing_.requested_rate == requested && match_timing_.actual_rate == current,
+        "offline controls changed saved canonical speed fields"
+    );
+    if (!options_.snapshot.empty())
+        write_ppm(options_.snapshot, surface_);
+    std::printf(
+        "offline-speed: trajectory checkpoints=%zu largest_batch=%u real_batch=%u drawn_frames=28 "
+        "pause=ok controls=ok canonical_speed=unchanged\n",
+        checkpoints.size(),
+        largest_batch,
+        real_batch
+    );
+    return 0;
+}
+
 void Runtime::run_benchmark(std::size_t frames) {
     // Each match is drawn at the zoom --zoom asks for, within the view's
     // limits, as a headless match is.

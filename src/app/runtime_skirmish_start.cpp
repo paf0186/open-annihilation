@@ -535,6 +535,9 @@ void Runtime::bootstrap_match(const MatchBootstrap& bootstrap) {
     );
     altitude_sight_blocked_ = false;
     match_tick_blocked_ = false;
+    offline_clock_ = {};
+    offline_report_ns_ = 0;
+    offline_report_tick_ = 0;
     match_timing_ = {};
     load_progress_.fill(0);
     begin_loading_screen();
@@ -1073,7 +1076,10 @@ void Runtime::bootstrap_match(const MatchBootstrap& bootstrap) {
         30,
         random_seed,
         this,
-        [this] { return clock_milliseconds(); },
+        [this] {
+            return offline_speed_active() ? match_timing_.tick * kFixedClockMsPerTick
+                                          : clock_milliseconds();
+        },
         collision_plots,
         oa::sim::visibility_state::AltitudeSightData{
             prepared_map_->sight_width,
@@ -1342,6 +1348,9 @@ void Runtime::bootstrap_match(const MatchBootstrap& bootstrap) {
         match_->configure_player_alliances(static_cast<uint8_t>(player), allies);
         std::copy(allies.begin(), allies.end(), match_->state().game.players[player].alliance);
     }
+    offline_clock_ = {};
+    offline_report_ns_ = 0;
+    offline_report_tick_ = 0;
     match_timing_ = {};
     match_timing_.requested_rate = preferences_.game_speed;
     match_timing_.actual_rate = preferences_.current_game_speed;

@@ -3923,7 +3923,8 @@ void Runtime::bind_options_context() {
     const bool multiplayer = (current_extension_state() & extension_state::multiplayer) != 0;
     context.session_kind = ingame_session(campaign_mission_, multiplayer);
     // A watcher's game speed slider is locked.
-    context.game_speed_locked = (current_extension_state() & extension_state::local_watcher) != 0;
+    context.game_speed_locked =
+        offline_speed_active() || (current_extension_state() & extension_state::local_watcher) != 0;
     context.host = {};
     context.host.context = this;
     context.host.play_sound = [](void* host, const char* sound) {
@@ -4353,6 +4354,9 @@ void Runtime::activate_options_gadget() {
             break;
         case ui::OptionsPanel::speeds:
             ui::options_enter_speeds(panel, context);
+            if (offline_speed_active())
+                if (auto* game = ui::panel_control(panel, "GAME"))
+                    game->grayed = 1;
             break;
         case ui::OptionsPanel::music:
             ui::options_enter_music(panel, context);

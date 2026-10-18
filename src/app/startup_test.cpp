@@ -1013,6 +1013,12 @@ int main() {
     );
     expect(parse({"--max-fps", "0"}).max_frames_per_second == 0, "--max-fps 0 is no limit");
 
+    expect(!plain.offline_speed, "offline acceleration is opt-in");
+    expect(parse({"--offline-speed", "1000"}).offline_speed == 1000, "offline target is read");
+    expect(!rejection({"--offline-speed", "0"}).empty(), "zero offline target is rejected");
+    expect(!rejection({"--offline-speed", "10001"}).empty(), "offline target is bounded");
+    expect(!rejection({"--offline-speed", "1000", "--training-worker"}).empty(), "worker conflict");
+
     // Hardware acceleration's flags decide the setting for the run: a
     // level named, Full for the bare flag, Off for --no-hardware-acceleration.
     using oa::ui::engine_settings::HardwareAcceleration;

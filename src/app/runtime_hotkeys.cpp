@@ -641,6 +641,18 @@ void Runtime::read_speed_lock_line(const char* text) {
 }
 
 void Runtime::adjust_game_speed(int delta) {
+    if (offline_speed_active()) {
+        if (offline_multiplier_ == 0)
+            offline_multiplier_ = *options_.offline_speed;
+        if (delta > 0)
+            offline_multiplier_ =
+                std::min(offline_multiplier_ * 2, frame_pacing::kHighestOfflineSpeed);
+        else if (delta < 0)
+            offline_multiplier_ = std::max(offline_multiplier_ / 2, uint32_t{1});
+        offline_clock_ = {};
+        status_ = "Offline target " + std::to_string(offline_multiplier_) + "x (capacity limited)";
+        return;
+    }
     auto& world = match_->state();
     const auto hooks = message_hooks();
     const auto range = game_speed_range();

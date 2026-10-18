@@ -184,6 +184,7 @@ finds it at the start of the output. The version line is the last line.
 | `--mute` | Plays no sound. |
 | `--first-run` | Shows the welcome at the first main menu again, even when it is done ([first run](first-run.md)). |
 | `--resolution WxH` | Opens the window at that size, for this run only, such as `--resolution 1280x720`. |
+| `--offline-speed N` | Opt in to an offline live-game target from 1 through 10000 times normal speed, as processor capacity allows. `+` doubles and `-` halves the target down to 1x; Pause and the game menu hold simulation. Drawing stays at most 60 wall-clock frames/s (or the lower `--max-fps` cap). The window title reports requested and actual speed. The normal GAME speed slider is locked; an added SHARE speed slider, when present, controls powers of two instead. Save files retain their ordinary speed; the target is only for this run. Network play, recording playback and recording capture are refused. |
 | `--max-fps N` | The most frames per wall-clock second, from 30 through 1000, or 0 for no limit, for this run. For a skirmish with `--headless-check --match-ticks` and without `--frame-rate`, limits drawing while simulation advances without waiting. |
 | `--hardware-acceleration[=off\|basic\|full]` | Sets Hardware acceleration for this run; alone it is `full`. |
 | `--no-hardware-acceleration` | Turns Hardware acceleration off for this run. |

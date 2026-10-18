@@ -345,6 +345,8 @@ struct Options {
     std::optional<std::size_t> local_ai_ticks;
     /// Uses binary64 coordinate rotation in offline simulation experiments.
     bool experimental_math = false;
+    /// Application-only offline target relative to normal speed; absent keeps normal controls.
+    std::optional<uint32_t> offline_speed;
     std::string local_ai_map;            ///< selected map, or Ashap Plateau when installed
     std::string training_map;            ///< map name, or the first installed skirmish map
     std::size_t training_limit = 108000; ///< maximum simulation ticks in the episode
@@ -725,6 +727,8 @@ struct Options {
     // waits to be reset, a changed floating-point setting, and textures
     // beyond the renderer's limit.
     bool check_renderer_ladder = false;
+    /// Exercises accelerated offline ticks, drawing and pause controls.
+    bool check_offline_speed = false;
     // --render-fault POINT[@FRAME]: --check-renderer-ladder forces only that
     // failure, at that presented frame of its case; unset for every case.
     std::optional<RenderFault> render_fault;

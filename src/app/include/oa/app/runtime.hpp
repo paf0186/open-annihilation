@@ -15057,6 +15057,17 @@ class Runtime final : public menu::Host,
     static void destroy_web_link_state(WebLinkState* state) noexcept;
 
     Options options_;
+    frame_pacing::OfflineClock offline_clock_{};
+    uint32_t offline_multiplier_{}; // 0 until the command-line target is first used
+    uint64_t offline_report_ns_{};
+    uint32_t offline_report_tick_{};
+    /// Whether the opted-in offline pacing may control this live match.
+    [[nodiscard]] bool offline_speed_active() const;
+    /// Runs the pending sequential ticks, optionally bounded by the offline frame allowance.
+    void run_pending_match_ticks(bool accelerated);
+    /// Checks offline batching, drawing and input against one-tick steps.
+    int check_offline_speed();
+
     oa::AssetStore& assets_;
     Extension extension_;
     frontend::State state_{};

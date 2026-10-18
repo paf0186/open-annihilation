@@ -21,6 +21,7 @@
 #include "oa/platform/app_loop.hpp"
 #include "oa/platform/preferences.hpp"
 #include "oa/ui/engine_settings.hpp"
+#include "oa/ui/console/game_fields.hpp"
 #include "oa/ui/first_run/first_run.hpp"
 #include "oa/platform/job_pool.hpp"
 #include "oa/platform/log_files.hpp"
@@ -551,6 +552,8 @@ int Runtime::run() {
     const auto extension_run = [&](RunPhase phase) {
         return call_hook_or_raise<&Extension::run_mode>(extension_, *this, phase, exit_code);
     };
+    if (options_.check_offline_speed)
+        return check_offline_speed();
     if (options_.training_worker)
         return run_training_worker();
     if (options_.local_ai_ticks)
@@ -1316,21 +1319,50 @@ void unit_motion(void* context, uint32_t slot, oa::present::unit_playout::Motion
 
 } // namespace
 
+bool Runtime::offline_speed_active() const {
+    return options_.offline_speed && !options_.fixed_clock &&
+           (current_extension_state() &
+            (extension_state::multiplayer | extension_state::shared_match |
+             extension_state::replay)) == 0;
+}
+
 void Runtime::advance_match_clock(uint32_t now_ms) {
     // Every tick rounds with the settings the game started with.
     oa::base::float_precision::restore_program_float_control();
     match_timing_.flags =
         clock_flags_with_pause(match_timing_.flags, match_->state().game.sim_run_flags);
-    // A clock state the loop refuses runs no step this frame.
-    if (const auto clock_error = oa::base::game_loop::update_timing(
-            match_timing_, oa::base::game_loop::scaled_clock(now_ms, match_clock_scale())
-        );
-        clock_error != oa::base::game_loop::LoopError::none) {
-        report_match_tick_error(oa::base::game_loop::loop_error_text(clock_error));
-        return;
+    const bool accelerated = offline_speed_active();
+    if (accelerated) {
+        if (offline_multiplier_ == 0)
+            offline_multiplier_ = *options_.offline_speed;
+        const bool running = (match_timing_.flags & oa::ui::console::kSimRunPaused) == 0;
+        match_timing_.pending_steps = static_cast<int32_t>(frame_pacing::offline_ticks_due(
+            offline_clock_, frame_pacing::steady_now_ns(), offline_multiplier_, running
+        ));
+        match_timing_.previous_clock =
+            oa::base::game_loop::scaled_clock(now_ms, match_clock_scale());
     }
+    // A clock state the loop refuses runs no step this frame.
+    if (!accelerated) {
+        if (const auto clock_error = oa::base::game_loop::update_timing(
+                match_timing_, oa::base::game_loop::scaled_clock(now_ms, match_clock_scale())
+            );
+            clock_error != oa::base::game_loop::LoopError::none) {
+            report_match_tick_error(oa::base::game_loop::loop_error_text(clock_error));
+            return;
+        }
+    }
+    run_pending_match_ticks(accelerated);
+}
+
+void Runtime::run_pending_match_ticks(bool accelerated) {
+    oa::base::float_precision::restore_program_float_control();
+    const uint64_t batch_start = frame_pacing::steady_now_ns();
     try {
         for (int32_t step = 0; step < match_timing_.pending_steps; ++step) {
+            if (accelerated && step != 0 &&
+                frame_pacing::steady_now_ns() - batch_start >= frame_pacing::kOfflineTickBudgetNs)
+                break;
             // Each step that runs a tick is timed for the frame statistics,
             // on the real clock; a step the extension holds runs none.
             const auto step_start = std::chrono::steady_clock::now();
@@ -1372,14 +1404,20 @@ void Runtime::advance_match_clock(uint32_t now_ms) {
             // players this machine does not simulate reads where they are.
             // It throws nothing, so it costs the match no step.
             observe_unit_playout();
+            if (accelerated) {
+                step_timed_map_units();
+                if (match_->outcome() != sim::scenario::Outcome::ongoing)
+                    break;
+            }
         }
     } catch (const std::exception& error) {
         report_match_tick_error(error.what());
     }
     if (match_timing_.pending_steps != 0)
         oa::sim::messages::expire_oldest_message(match_->state().game);
-    // The map's timed units are placed once a frame, as they come due.
-    step_timed_map_units();
+    // Accelerated frames may span many scheduled spawns; those run per tick above.
+    if (!accelerated)
+        step_timed_map_units();
 }
 
 void Runtime::observe_unit_playout() noexcept {
