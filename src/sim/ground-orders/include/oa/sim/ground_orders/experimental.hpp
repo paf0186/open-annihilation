@@ -14,7 +14,8 @@ enum class ExperimentalPathfinder : uint8_t { compatible, weighted };
 ///
 /// Weighted search uses g + 24 * goal_cost to order the heap. Movement costs,
 /// turn costs, goal acceptance, footprints and search budgets stay unchanged.
-/// Routes and their publication ticks may change. Do not change the mode while
+/// It can reduce expansions while choosing more expensive routes. Routes and
+/// their publication ticks may change. Do not change the mode while
 /// a search is active, or use weighted mode with compatible peers or recordings.
 ///
 /// @param mode compatible priority or the experimental weighted priority

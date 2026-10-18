@@ -15,6 +15,10 @@ constexpr int32_t experimental_priority_scale = 24 << 16;
 ExperimentalPathfinder pathfinder_mode = ExperimentalPathfinder::compatible;
 
 /// Scales a goal cost, dropping the low sixteen product bits.
+///
+/// @param cost goal distance cost
+/// @param scale heuristic weight in 16.16
+/// @return the signed scaled cost
 int32_t scaled_goal_cost(int32_t cost, int32_t scale) noexcept {
     return static_cast<int32_t>((int64_t(cost) * int64_t(scale)) >> 16);
 }
