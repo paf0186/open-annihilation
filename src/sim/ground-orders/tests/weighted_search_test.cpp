@@ -115,6 +115,8 @@ void compare(const char* name, Terrain& terrain, std::array<int16_t, 2> target, 
     const auto compatible = search(terrain, ExperimentalPathfinder::compatible, target);
     const auto weighted = search(terrain, ExperimentalPathfinder::weighted, target);
     const auto repeated = search(terrain, ExperimentalPathfinder::weighted, target);
+    const auto greedy = search(terrain, ExperimentalPathfinder::greedy, target);
+    const auto greedy_repeated = search(terrain, ExperimentalPathfinder::greedy, target);
     const auto restored = search(terrain, ExperimentalPathfinder::compatible, target);
     OA_CHECK(compatible.threshold == weighted.threshold);
     OA_CHECK(compatible.initial_flags == weighted.initial_flags);
@@ -124,6 +126,15 @@ void compare(const char* name, Terrain& terrain, std::array<int16_t, 2> target, 
     OA_CHECK(weighted.travel_cost == repeated.travel_cost);
     OA_CHECK(weighted.reached_goal == repeated.reached_goal);
     OA_CHECK(weighted.route == repeated.route);
+    OA_CHECK(weighted.terminal_cost == compatible.terminal_cost);
+    OA_CHECK(weighted.travel_cost == compatible.travel_cost);
+    OA_CHECK(greedy.status == greedy_repeated.status);
+    OA_CHECK(greedy.expansions == greedy_repeated.expansions);
+    OA_CHECK(greedy.terminal_cost == greedy_repeated.terminal_cost);
+    OA_CHECK(greedy.route == greedy_repeated.route);
+    OA_CHECK(greedy.threshold == compatible.threshold);
+    OA_CHECK(greedy.initial_flags == compatible.initial_flags);
+    OA_CHECK(greedy.reached_goal == reachable);
     OA_CHECK(compatible.status == restored.status);
     OA_CHECK(compatible.expansions == restored.expansions);
     OA_CHECK(compatible.terminal_cost == restored.terminal_cost);
@@ -132,13 +143,15 @@ void compare(const char* name, Terrain& terrain, std::array<int16_t, 2> target, 
     // goal. Route publication alone does not establish that the goal was reached.
     OA_CHECK(compatible.reached_goal == reachable);
     OA_CHECK(weighted.reached_goal == reachable);
-    for (const bool experiment : {false, true}) {
-        const auto& result = experiment ? weighted : compatible;
+    const std::array<const Result*, 3> results{&compatible, &weighted, &greedy};
+    constexpr std::array<const char*, 3> names{"compatible", "weighted", "greedy"};
+    for (std::size_t mode = 0; mode < results.size(); ++mode) {
+        const auto& result = *results[mode];
         std::printf(
             "%s %s status=%u reached-goal=%u expansions=%u terminal-cost=%d travel-cost=%u "
             "points=%zu\n",
             name,
-            experiment ? "weighted" : "compatible",
+            names[mode],
             static_cast<unsigned>(result.status),
             static_cast<unsigned>(result.reached_goal),
             result.expansions,

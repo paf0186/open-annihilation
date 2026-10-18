@@ -348,7 +348,7 @@ void check_weighted_priority_switch() {
     const auto start_handle = weighted.cell(1, 1).handle;
     CHECK(
         std::bit_cast<int32_t>(weighted.heap().payload(start_handle)[2]) ==
-        24 * goal_cost(goal, 1, 1)
+        (7 * goal_cost(goal, 1, 1)) / 4
     );
     auto result = SearchAdvance::in_progress;
     for (int slice = 0; slice < 32 && result == SearchAdvance::in_progress; ++slice)
@@ -365,6 +365,40 @@ void check_weighted_priority_switch() {
                 );
             }
         }
+    }
+    set_experimental_pathfinder(ExperimentalPathfinder::greedy);
+    {
+        SearchWorker greedy;
+        CHECK(
+            greedy.begin(make_record(unit, navigation, goal, map), begin, all_seen) ==
+            SearchAdvance::in_progress
+        );
+        CHECK(
+            std::bit_cast<int32_t>(greedy.heap().payload(greedy.cell(1, 1).handle)[2]) ==
+            24 * goal_cost(goal, 1, 1)
+        );
+        result = SearchAdvance::in_progress;
+        for (int slice = 0; slice < 32 && result == SearchAdvance::in_progress; ++slice)
+            result = greedy.advance_slice();
+        CHECK(result == SearchAdvance::succeeded);
+    }
+    set_experimental_pathfinder(ExperimentalPathfinder::weighted);
+    {
+        SearchWorker adaptive;
+        auto high_weight = begin;
+        high_weight.heuristic_scale = 9 << 16;
+        CHECK(
+            adaptive.begin(make_record(unit, navigation, goal, map), high_weight, all_seen) ==
+            SearchAdvance::in_progress
+        );
+        CHECK(
+            std::bit_cast<int32_t>(adaptive.heap().payload(adaptive.cell(1, 1).handle)[2]) ==
+            9 * goal_cost(goal, 1, 1)
+        );
+        result = SearchAdvance::in_progress;
+        for (int slice = 0; slice < 32 && result == SearchAdvance::in_progress; ++slice)
+            result = adaptive.advance_slice();
+        CHECK(result == SearchAdvance::succeeded);
     }
     set_experimental_pathfinder(ExperimentalPathfinder::compatible);
     SearchWorker restored;

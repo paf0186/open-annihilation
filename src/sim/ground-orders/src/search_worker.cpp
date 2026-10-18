@@ -11,8 +11,26 @@
 namespace oa::sim::ground_orders {
 namespace {
 
-constexpr int32_t experimental_priority_scale = 24 << 16;
 ExperimentalPathfinder pathfinder_mode = ExperimentalPathfinder::compatible;
+
+/// Selects heap priority without changing the compatible goal heuristic.
+///
+/// @param mode priority selected before the search starts
+/// @param compatible_scale adaptive heuristic weight in 16.16
+/// @return priority weight in 16.16
+int32_t priority_scale(ExperimentalPathfinder mode, int32_t compatible_scale) noexcept {
+    switch (mode) {
+    case ExperimentalPathfinder::weighted:
+        return compatible_scale < experimental_weighted_priority_floor
+                   ? experimental_weighted_priority_floor
+                   : compatible_scale;
+    case ExperimentalPathfinder::greedy:
+        return experimental_greedy_priority_scale;
+    case ExperimentalPathfinder::compatible:
+        return compatible_scale;
+    }
+    return compatible_scale;
+}
 
 /// Scales a goal cost, dropping the low sixteen product bits.
 ///
@@ -324,7 +342,7 @@ uint32_t SearchWorker::expand_best() {
     const auto straight_run = static_cast<int16_t>(parent_run + 1);
     const auto early_turn_penalty =
         parent_run < search_early_run_limit ? search_early_turn_penalty : 0;
-    const auto weighted_priority = pathfinder_mode == ExperimentalPathfinder::weighted;
+    const auto expansion_priority_scale = priority_scale(pathfinder_mode, heuristic_scale_);
     auto expand_neighbor = [&](uint32_t relative_turn) {
         const auto direction = (static_cast<uint32_t>(cell.predecessor) + relative_turn) & 7u;
         const auto x = parent_x + search_direction_x[direction];
@@ -358,8 +376,9 @@ uint32_t SearchWorker::expand_best() {
             const auto run = relative_turn == 0 ? straight_run : int16_t{1};
             if (relative_turn != 0)
                 g += early_turn_penalty;
-            const auto priority =
-                weighted_priority ? scaled_goal_cost(cost, experimental_priority_scale) : estimate;
+            const auto priority = expansion_priority_scale == heuristic_scale_
+                                      ? estimate
+                                      : scaled_goal_cost(cost, expansion_priority_scale);
             const auto f = g + priority;
             const auto handle = heap_.insert(
                 pack_node(static_cast<int16_t>(x), static_cast<int16_t>(z), g, f, extra, run)
@@ -624,12 +643,13 @@ SearchAdvance SearchWorker::begin(
     start_cell.predecessor = heading_direction(unit.heading);
     // The start node's extra (payload word 3) is zero; it is never read, because
     // the start cell is closed on first pop and closed cells are not reopened.
+    const auto start_priority_scale = priority_scale(pathfinder_mode, heuristic_scale_);
     const auto start_priority =
-        pathfinder_mode == ExperimentalPathfinder::weighted
-            ? scaled_goal_cost(
-                  goal_cost(*record_.goal, start_[0], start_[1]), experimental_priority_scale
-              )
-            : start_cost;
+        start_priority_scale == heuristic_scale_
+            ? start_cost
+            : scaled_goal_cost(
+                  goal_cost(*record_.goal, start_[0], start_[1]), start_priority_scale
+              );
     const auto handle =
         heap_.insert(pack_node(start_[0], start_[1], 0, start_priority, 0, search_start_run));
     start_cell.handle = handle;
