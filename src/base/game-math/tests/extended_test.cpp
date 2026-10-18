@@ -209,6 +209,44 @@ void check_wide_operations() {
     ));
 }
 
+void check_rounding_boundaries() {
+    constexpr uint64_t leading_bit = uint64_t{1} << 63;
+    for (const Precision precision : {Precision::bits_53, Precision::bits_64}) {
+        const int width = static_cast<int>(precision);
+        const uint64_t unit = uint64_t{1} << static_cast<unsigned>(64 - width);
+        const std::array<uint64_t, 5> significands{
+            leading_bit,
+            leading_bit + unit,
+            leading_bit + 2 * unit,
+            ~uint64_t{0} - 2 * unit + 1,
+            ~uint64_t{0} - unit + 1
+        };
+        for (const uint64_t significand : significands) {
+            for (const bool negative : {false, true}) {
+                const Extended base = value(significand, 0, negative);
+                // The addends lie just below, exactly at and just above
+                // half of the result's least significant bit.
+                const std::array<Extended, 3> addends{
+                    value(~uint64_t{0}, -width - 1, negative),
+                    value(leading_bit, -width, negative),
+                    value(leading_bit + 1, -width, negative)
+                };
+                for (std::size_t i = 0; i < addends.size(); ++i) {
+                    const bool increment = i == 2 || (i == 1 && (significand & unit) != 0);
+                    uint64_t rounded = significand + (increment ? unit : 0);
+                    const bool carried = rounded == 0;
+                    if (carried)
+                        rounded = leading_bit;
+                    CHECK(same(
+                        gm::add(base, addends[i], precision),
+                        value(rounded, carried ? 1 : 0, negative)
+                    ));
+                }
+            }
+        }
+    }
+}
+
 void check_named_values() {
     // pi and pi/2 at 64 bits.
     CHECK(same(gm::arctangent(0.0, -1.0), value(0xc90fdaa22168c235ULL, 1)));
@@ -436,6 +474,7 @@ int main() {
     check_compare();
     check_double_operations();
     check_wide_operations();
+    check_rounding_boundaries();
     check_named_values();
     check_game_functions();
     check_sample_sets();

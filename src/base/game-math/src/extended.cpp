@@ -160,8 +160,9 @@ Extended pack(bool negative, U128 value, bool sticky, int32_t scale, Precision p
         kept = shift_left(value, static_cast<unsigned>(-discarded)).low;
     } else {
         const auto count = static_cast<unsigned>(discarded);
-        kept = shift_right(value, count).low;
-        const bool round_bit = (shift_right(value, count - 1).low & 1) != 0;
+        const U128 through_round_bit = shift_right(value, count - 1);
+        kept = (through_round_bit.low >> 1) | (through_round_bit.high << 63);
+        const bool round_bit = (through_round_bit.low & 1) != 0;
         const bool below_round_bit = sticky || low_bits_set(value, count - 1);
         if (round_bit && (below_round_bit || (kept & 1) != 0)) {
             ++kept;
