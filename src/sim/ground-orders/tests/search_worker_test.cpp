@@ -366,22 +366,6 @@ void check_weighted_priority_switch() {
             }
         }
     }
-    set_experimental_pathfinder(ExperimentalPathfinder::greedy);
-    {
-        SearchWorker greedy;
-        CHECK(
-            greedy.begin(make_record(unit, navigation, goal, map), begin, all_seen) ==
-            SearchAdvance::in_progress
-        );
-        CHECK(
-            std::bit_cast<int32_t>(greedy.heap().payload(greedy.cell(1, 1).handle)[2]) ==
-            24 * goal_cost(goal, 1, 1)
-        );
-        result = SearchAdvance::in_progress;
-        for (int slice = 0; slice < 32 && result == SearchAdvance::in_progress; ++slice)
-            result = greedy.advance_slice();
-        CHECK(result == SearchAdvance::succeeded);
-    }
     set_experimental_pathfinder(ExperimentalPathfinder::weighted);
     {
         SearchWorker adaptive;

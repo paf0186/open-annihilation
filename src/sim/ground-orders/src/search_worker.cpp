@@ -24,8 +24,6 @@ int32_t priority_scale(ExperimentalPathfinder mode, int32_t compatible_scale) no
         return compatible_scale < experimental_weighted_priority_floor
                    ? experimental_weighted_priority_floor
                    : compatible_scale;
-    case ExperimentalPathfinder::greedy:
-        return experimental_greedy_priority_scale;
     case ExperimentalPathfinder::compatible:
         return compatible_scale;
     }
