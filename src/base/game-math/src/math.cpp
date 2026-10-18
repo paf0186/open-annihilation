@@ -61,7 +61,9 @@ struct AngleWordTable {
     }
 };
 
-// Built once, on first use; the values never change afterwards.
+/// Returns the angle table, building its immutable values on first use.
+///
+/// @return the shared table of exact sine and cosine values
 const AngleWordTable& angle_word_table() noexcept {
     static const AngleWordTable table;
     return table;
@@ -83,6 +85,7 @@ struct Binary64AngleWordTable {
     std::array<double, angle_word_entries> sine{};
     std::array<double, angle_word_entries> cosine{};
 
+    /// Rounds the exact angle table to binary64 coefficients.
     Binary64AngleWordTable() noexcept {
         const auto& table = angle_word_table();
         for (std::size_t word = 0; word < angle_word_entries; ++word) {
@@ -97,6 +100,12 @@ struct Binary64AngleWordTable {
     }
 };
 
+/// Rotates coordinates with separately rounded binary64 products and sums.
+///
+/// @param first first coordinate
+/// @param second second coordinate
+/// @param angle angle word, 65536 per turn
+/// @return first * cos - second * sin and first * sin + second * cos
 RotatedPair binary64_rotate_pair(int32_t first, int32_t second, int16_t angle) noexcept {
     static const Binary64AngleWordTable table;
     const bool negative = angle < 0;
