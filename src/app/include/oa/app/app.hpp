@@ -337,6 +337,12 @@ struct Options {
     std::optional<std::size_t> benchmark_frames;
     // Headless in-match run: ticks to simulate, output size, per-side army.
     std::optional<std::size_t> match_ticks;
+    // Skip per-tick presentation in the headless skirmish run.
+    bool simulation_only = false;
+    /// Runs the synchronous local-player training protocol on standard input/output.
+    bool training_worker = false;
+    std::string training_map;            ///< map name, or the first installed skirmish map
+    std::size_t training_limit = 108000; ///< maximum simulation ticks in the episode
     // Headless campaign run: the campaign's name and the mission index that
     // --headless-check starts through the briefing and ticks for match_ticks.
     std::string campaign;

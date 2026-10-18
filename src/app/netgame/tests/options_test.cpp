@@ -41,7 +41,8 @@ Parsed parse(const std::vector<const char*>& arguments, bool extended = true) {
     std::vector<char*> argv;
     for (auto& argument : storage)
         argv.push_back(argument.data());
-    oa::app::NetgameContext context{};
+    auto& context = oa::app::netgame_context();
+    context = {};
     oa::app::Extension table{};
     if (extended)
         oa::app::fill_option_hooks(table, context);
@@ -136,11 +137,42 @@ int main() {
     check_frontend_state_queries();
     const auto plain = parse({"--headless-check"});
 
+    for (const auto& run : std::vector<std::vector<const char*>>{
+             {"--play-demo", "game.tad"},
+             {"--net-loopback-check", "60"},
+             {"--check-recording-hook"},
+             {"--net-record", "game.tad"},
+             {"--list-content"},
+             {"--launch", "-"},
+             {"-c", "-"}
+         }) {
+        std::vector<const char*> arguments{"--training-worker"};
+        arguments.insert(arguments.end(), run.begin(), run.end());
+        expect(
+            rejection(arguments) == "--training-worker cannot be combined with network run modes",
+            "training refuses network run modes"
+        );
+    }
+
     const auto demo = parse({"--play-demo", "game.tad", "--trace-digest", "demo.trace"});
     expect(
         demo.net.play_demo == "game.tad" && demo.app.trace_digest == "demo.trace",
         "demo runs take a trace"
     );
+
+    for (const auto& run : std::vector<std::vector<const char*>>{
+             {"--play-demo", "game.tad"}, {"--net-loopback-check", "60"}, {"--check-recording-hook"}
+         }) {
+        std::vector<const char*> arguments{
+            "--simulation-only", "--headless-check", "--match-ticks", "60"
+        };
+        arguments.insert(arguments.end(), run.begin(), run.end());
+        expect(
+            rejection(arguments) == "--simulation-only cannot be used with --net-loopback-check, "
+                                    "--check-recording-hook or --play-demo",
+            "--simulation-only refuses network play's headless runs"
+        );
+    }
 
     // A recording named in Chinese (U+5F55 U+50CF) is read by its UTF-8 name.
     const auto named = parse({"--play-demo", "\xe5\xbd\x95\xe5\x83\x8f.tad"});

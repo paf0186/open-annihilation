@@ -1031,7 +1031,7 @@ if(BUILD_TESTING)
     set_tests_properties(app-extension-text PROPERTIES TIMEOUT 120)
   endif()
 endif()
-set(oa_game_sources src/app/main.cpp src/app/full_screen.cpp src/app/runtime_window.cpp
+set(oa_game_sources src/app/training_transport.cpp src/app/runtime_training.cpp src/app/main.cpp src/app/full_screen.cpp src/app/runtime_window.cpp
   src/app/screen_size.cpp
   src/app/screen_mode.cpp src/app/runtime_screen_size.cpp
   src/app/game_directory_dialog.cpp src/app/runtime.cpp

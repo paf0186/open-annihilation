@@ -1038,6 +1038,25 @@ take_match_option(std::string_view argument, ArgumentCursor& cursor, Options& op
         options.match_ticks = parse_count(option_value(cursor));
         return true;
     }
+    if (argument == "--training-worker") {
+        options.training_worker = true;
+        options.headless_check = true;
+        options.skip_intro = true;
+        options.unattended = true;
+        return true;
+    }
+    if (argument == "--training-map") {
+        options.training_map = option_value(cursor);
+        return true;
+    }
+    if (argument == "--training-limit") {
+        options.training_limit = parse_count(option_value(cursor));
+        return true;
+    }
+    if (argument == "--simulation-only") {
+        options.simulation_only = true;
+        return true;
+    }
     if (argument == "--campaign") {
         options.campaign = option_value(cursor);
         return true;
@@ -1440,7 +1459,8 @@ void write_startup_line(std::string_view text) {
                      "[--max-fps N] "
                      "[--hardware-acceleration[=off|basic|full] | --no-hardware-acceleration] "
                      "[--native-density] [--display-modes MODES] "
-                     "[--benchmark FRAMES] [--match-ticks N "
+                     "[--training-worker [--training-map NAME] [--training-limit N]] [--benchmark "
+                     "FRAMES] [--simulation-only] [--match-ticks N "
                      "[--frame-rate FPS [--frame-log FILE] [--scroll-camera] [--march] "
                      "[--follow] [--frame-clock MS]]] "
                      "[--campaign NAME --mission N [--past-outcome] [--restart-at TICK]] "
@@ -1539,6 +1559,42 @@ void write_startup_line(std::string_view text) {
     }
     if (result.campaign_mission.has_value() != !result.campaign.empty())
         throw std::runtime_error("--campaign and --mission are used together");
+    if (result.training_worker && result.training_limit == 0)
+        throw std::runtime_error("--training-limit must be positive");
+    if (result.training_worker && !result.seed)
+        result.seed = 1;
+    if (result.training_worker &&
+        (result.match_ticks || result.simulation_only || result.frame_rate ||
+         result.campaign_mission || !result.load_file.empty() || result.save_after ||
+         result.benchmark_frames || !result.generate_script.empty() ||
+         !result.render_script.empty() || !result.stage_file.empty() ||
+         result.check_director_view || result.check_director_render || result.check_interpolation ||
+         result.check_unit_playout || result.check_zoom_memory))
+        throw std::runtime_error("--training-worker cannot be combined with another run mode");
+    if (!result.training_worker && !result.training_map.empty())
+        throw std::runtime_error("--training-map needs --training-worker");
+    if (result.simulation_only &&
+        (!result.headless_check || !result.match_ticks || result.frame_rate ||
+         result.campaign_mission || !result.load_file.empty() || result.save_after ||
+         result.benchmark_frames))
+        throw std::runtime_error(
+            "--simulation-only needs --headless-check and --match-ticks, without "
+            "--frame-rate, --campaign, --load, --save-after or --benchmark"
+        );
+    if (result.simulation_only) {
+        const std::pair<bool, const char*> other_runs[] = {
+            {result.check_director_view, "--check-director-view"},
+            {result.check_director_render, "--check-director-render"},
+            {result.check_interpolation, "--check-interpolation"},
+            {result.check_unit_playout, "--check-unit-playout"},
+            {result.check_zoom_memory, "--check-zoom-memory"},
+        };
+        for (const auto& [selected, name] : other_runs)
+            if (selected)
+                throw std::runtime_error(
+                    std::string("--simulation-only cannot be used with ") + name
+                );
+    }
     if (result.campaign_restart_tick && !result.campaign_mission)
         throw std::runtime_error("--restart-at needs --campaign and --mission");
     if (!result.trace_units.empty() && result.trace_digest.empty())
@@ -1551,6 +1607,8 @@ void write_startup_line(std::string_view text) {
         throw std::runtime_error(
             "--frame-log, --scroll-camera, --march, --follow and --frame-clock need --frame-rate"
         );
+    if (result.training_worker)
+        note_game_switches(result);
     {
         // A launch file named without a folder is looked for in the game
         // folder too, which only the engine's options name, while the hook

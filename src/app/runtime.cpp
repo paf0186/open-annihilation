@@ -551,6 +551,8 @@ int Runtime::run() {
     const auto extension_run = [&](RunPhase phase) {
         return call_hook_or_raise<&Extension::run_mode>(extension_, *this, phase, exit_code);
     };
+    if (options_.training_worker)
+        return run_training_worker();
     if (extension_run(RunPhase::start))
         return exit_code;
     if (options_.headless_check) {

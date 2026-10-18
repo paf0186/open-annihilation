@@ -986,19 +986,25 @@ void Runtime::run_headless_match(std::size_t ticks) {
     prepare_headless_match();
     int64_t window_ns = 0;
     int64_t worst_ns = 0;
+    std::size_t window_ticks = 0;
+    const auto run_start = BenchClock::now();
     for (std::size_t tick = 1; tick <= ticks; ++tick) {
         const auto start = BenchClock::now();
         try {
             step_match_simulation();
         } catch (const std::exception& error) {
+            if (options_.simulation_only)
+                throw;
             report_match_tick_error(error.what());
         }
         if constexpr (self_checks_built)
             if (options_.reclaim_check)
                 tick_reclaim_check();
-        rebuild_surface();
+        if (!options_.simulation_only)
+            rebuild_surface();
         const auto spent = elapsed_ns(start);
         window_ns += spent;
+        ++window_ticks;
         worst_ns = std::max(worst_ns, spent);
         if (tick % 30 == 0 || tick == ticks) {
             std::size_t live = 0;
@@ -1013,7 +1019,7 @@ void Runtime::run_headless_match(std::size_t ticks) {
                 "tick %5zu: %.2f ms avg %.2f ms max | units %zu projectiles %zu wrecks %zu "
                 "explosions %zu fragments %zu particles %zu\n",
                 tick,
-                static_cast<double>(window_ns) / 1.0e6 / 30.0,
+                static_cast<double>(window_ns) / 1.0e6 / static_cast<double>(window_ticks),
                 static_cast<double>(worst_ns) / 1.0e6,
                 live,
                 match_->projectiles().size(),
@@ -1025,13 +1031,27 @@ void Runtime::run_headless_match(std::size_t ticks) {
             std::fflush(stdout);
             window_ns = 0;
             worst_ns = 0;
+            window_ticks = 0;
         }
     }
+    const double seconds = static_cast<double>(elapsed_ns(run_start)) / 1.0e9;
     if constexpr (self_checks_built)
         if (options_.reclaim_check)
             finish_reclaim_check();
-    if (!options_.snapshot.empty())
+    if (!options_.snapshot.empty()) {
+        if (options_.simulation_only)
+            rebuild_surface();
         write_ppm(options_.snapshot, surface_);
+    }
+    if (options_.simulation_only)
+        std::printf(
+            "simulation run: %zu ticks in %.6f s (%.2f ticks/s; logging included) "
+            "world digest %016llx\n",
+            ticks,
+            seconds,
+            seconds > 0.0 ? static_cast<double>(ticks) / seconds : 0.0,
+            static_cast<unsigned long long>(frame_run_digest())
+        );
     print_memory_status();
 }
 

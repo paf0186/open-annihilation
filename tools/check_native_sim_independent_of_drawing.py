@@ -13,6 +13,7 @@ played headless many ways that change only what is drawn, when and how:
 - drawn at 60, 120 and 144 frames a second, and at 10, where most ticks are
   never drawn;
 - drawn once after every tick without the match clock (no --frame-rate);
+- simulated without per-tick drawing, with and without a final snapshot;
 - drawn at zoom 0.5 and 4;
 - drawn with enhanced anti-aliasing at 4x.
 
@@ -65,6 +66,7 @@ TRACE_TICK_BYTES = TRACE_RECORD_BYTES * (1 + TRACE_SECTIONS)
 
 RUN_LINE = re.compile(r"frame run: \d+ frames a second, \d+ frames, (\d+) ticks, .* "
                       r"world digest ([0-9a-f]{16})")
+SIMULATION_LINE = re.compile(r"simulation run: (\d+) ticks .* world digest ([0-9a-f]{16})")
 
 # Each run's name, extra options and preference values. The first is the
 # reference the others are held to.
@@ -78,6 +80,8 @@ RUNS = (
     ("drawn-144", ("--frame-rate", "144"), {}),
     ("slow-frames-10", ("--frame-rate", "10"), {}),
     ("every-tick", (), {}),
+    ("simulation-only", ("--simulation-only",), {}),
+    ("simulation-snapshot", ("--simulation-only", "--snapshot", "simulation.ppm"), {}),
     ("zoom-half", ("--frame-rate", "30", "--zoom", "0.5"), {}),
     ("zoom-4", ("--frame-rate", "30", "--zoom", "4"), {}),
     ("anti-aliasing-4", ("--frame-rate", "30"), {ANTI_ALIASING_KEY: "4"}),
@@ -101,7 +105,14 @@ def play(native, game_dir, workdir, name, options, preferences):
     if result.returncode != 0:
         print(result.stdout + result.stderr, end="")
         raise SystemExit(f"{name}: exited with {result.returncode}")
-    match = RUN_LINE.search(result.stdout)
+    simulation = SIMULATION_LINE.search(result.stdout)
+    if "--simulation-only" in options and simulation is None:
+        raise SystemExit(f"{name}: no simulation throughput report")
+    if "--snapshot" in options:
+        snapshot = workdir / options[options.index("--snapshot") + 1]
+        if not snapshot.is_file() or snapshot.stat().st_size == 0:
+            raise SystemExit(f"{name}: no final snapshot")
+    match = simulation or RUN_LINE.search(result.stdout)
     ticks, digest = (int(match[1]), match[2]) if match else (TICKS, None)
     return ticks, digest, trace.read_bytes()
 

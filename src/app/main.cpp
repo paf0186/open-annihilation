@@ -5,6 +5,7 @@
 // folder is missing and the platform brings game files in, intro playback
 // and runtime launch.
 #include "oa/app/runtime.hpp"
+#include "training_transport.hpp"
 #include "folder_chooser_screen.hpp"
 #include "game_files_check.hpp"
 #include "game_files_screen.hpp"
@@ -2252,7 +2253,8 @@ int main(int argc, char** argv) {
         const Extension& extension = extensions.combined();
         // A launch piped in on standard input is read when no launch file is
         // named (cat host.oalaunch | open-annihilation).
-        allow_piped_launch();
+        if (!prepare_training_transport(argc, argv))
+            allow_piped_launch();
         Options parsed = parse_options(argc, argv, extension);
         // The Game files screen's check installs its scripted platform
         // before anything reads the hooks.

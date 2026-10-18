@@ -1653,6 +1653,10 @@ class Runtime final : public menu::Host,
     /// @param ticks ticks to run
     void run_headless_match(std::size_t ticks);
 
+    /// Runs bounded synchronous training requests over a real local-player skirmish.
+    /// @return zero after EOF or close; nonzero after an engine fault
+    int run_training_worker();
+
     /// Runs the --campaign mission headless with the computer player active.
     ///
     /// Every distinct tick error is logged with the run's tick it first

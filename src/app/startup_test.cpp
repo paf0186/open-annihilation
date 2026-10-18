@@ -372,6 +372,10 @@ const std::vector<FlagCase>& flag_cases() {
         {"--march", &Options::march, frame_rate_run()},
         {"--follow", &Options::follow, frame_rate_run()},
         {"--past-outcome", &Options::campaign_past_outcome, {}},
+        {"--training-worker", &Options::training_worker, {}},
+        {"--simulation-only",
+         &Options::simulation_only,
+         {"--headless-check", "--match-ticks", "60"}},
         {"--busy-combat", &Options::busy_combat, {"--combat", "4"}},
         {"--give-orders", &Options::give_orders, {}},
         {"--reclaim-check", &Options::reclaim_check, {}},
@@ -481,6 +485,8 @@ const std::vector<ValueCase>& value_cases() {
         {"--resolution", "640x480", {}},
         {"--draw-threads", "2", {}},
         {"--match-ticks", "60", {}},
+        {"--training-map", "Coast", {"--training-worker"}},
+        {"--training-limit", "90", {"--training-worker"}},
         {"--campaign", "Arm Campaign", {"--mission", "0"}},
         {"--mission", "0", {"--campaign", "Arm Campaign"}},
         {"--restart-at", "30", {"--campaign", "Arm Campaign", "--mission", "0"}},
@@ -1207,6 +1213,61 @@ int main() {
             !plain.busy_combat,
         "--busy-combat goes with --combat"
     );
+    const auto worker =
+        parse({"--training-worker", "--training-map", "Coast", "--training-limit", "90"});
+    expect(
+        worker.training_worker && worker.headless_check && worker.unattended && worker.skip_intro &&
+            worker.seed == 1 && worker.training_map == "Coast" && worker.training_limit == 90,
+        "training worker has explicit bounded seeded setup"
+    );
+    expect(
+        rejection({"--training-worker", "--match-ticks", "30"}) ==
+            "--training-worker cannot be combined with another run mode",
+        "training worker refuses another run"
+    );
+    expect(
+        rejection({"--training-map", "Coast"}) == "--training-map needs --training-worker",
+        "training map needs worker mode"
+    );
+    expect(
+        parse({"--headless-check", "--match-ticks", "60", "--simulation-only"}).simulation_only &&
+            !plain.simulation_only,
+        "--simulation-only selects the headless simulation run"
+    );
+    for (const auto& arguments : std::vector<std::vector<const char*>>{
+             {"--simulation-only"},
+             {"--simulation-only", "--match-ticks", "60"},
+             {"--simulation-only", "--headless-check"},
+             {"--simulation-only", "--headless-check", "--match-ticks", "60", "--frame-rate", "30"},
+             {"--simulation-only", "--headless-check", "--match-ticks", "60", "--save-after", "30"},
+             {"--simulation-only", "--headless-check", "--match-ticks", "60", "--load", "a.sav"},
+             {"--simulation-only", "--headless-check", "--match-ticks", "60", "--benchmark", "1"},
+             {"--simulation-only",
+              "--headless-check",
+              "--match-ticks",
+              "60",
+              "--campaign",
+              "Arm",
+              "--mission",
+              "0"}
+         })
+        expect(
+            rejection(arguments) ==
+                "--simulation-only needs --headless-check and --match-ticks, without "
+                "--frame-rate, --campaign, --load, --save-after or --benchmark",
+            "--simulation-only refuses an incompatible run"
+        );
+    for (const char* check :
+         {"--check-director-view",
+          "--check-director-render",
+          "--check-interpolation",
+          "--check-unit-playout",
+          "--check-zoom-memory"})
+        expect(
+            rejection({"--headless-check", "--match-ticks", "60", "--simulation-only", check}) ==
+                std::string("--simulation-only cannot be used with ") + check,
+            "--simulation-only refuses another headless check"
+        );
     expect(
         rejection({"--headless-check", "--match-ticks", "60", "--busy-combat"}) ==
             "--busy-combat needs --combat",
