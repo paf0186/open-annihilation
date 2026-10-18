@@ -1,6 +1,7 @@
 # Measuring AI matches and recordings
 
-See also [simulation and rendering measurements](simulation-performance.md).
+See also [simulation and rendering measurements](simulation-performance.md) and
+[single-world local AI measurements](local-ai-benchmark.md).
 
 Normal simulation runs at 30 ticks per second. Running ten times faster needs
 at least 300 ticks per second. Five hundred times faster needs 15,000 ticks per

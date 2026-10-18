@@ -553,6 +553,8 @@ int Runtime::run() {
     };
     if (options_.training_worker)
         return run_training_worker();
+    if (options_.local_ai_ticks)
+        return run_local_ai_benchmark(*options_.local_ai_ticks);
     if (extension_run(RunPhase::start))
         return exit_code;
     if (options_.headless_check) {

@@ -1031,7 +1031,7 @@ if(BUILD_TESTING)
     set_tests_properties(app-extension-text PROPERTIES TIMEOUT 120)
   endif()
 endif()
-set(oa_game_sources src/app/training_transport.cpp src/app/runtime_training.cpp src/app/main.cpp src/app/full_screen.cpp src/app/runtime_window.cpp
+set(oa_game_sources src/app/training_transport.cpp src/app/runtime_training.cpp src/app/runtime_local_ai.cpp src/app/main.cpp src/app/full_screen.cpp src/app/runtime_window.cpp
   src/app/screen_size.cpp
   src/app/screen_mode.cpp src/app/runtime_screen_size.cpp
   src/app/game_directory_dialog.cpp src/app/runtime.cpp
@@ -3087,6 +3087,12 @@ endforeach()
           --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
           --scratch-root "${CMAKE_CURRENT_BINARY_DIR}/native-checks")
         set_tests_properties(native-training-worker PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
+        add_test(NAME native-local-ai COMMAND ${Python3_EXECUTABLE}
+          "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_native_local_ai.py"
+          --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
+          --scratch-root "${CMAKE_CURRENT_BINARY_DIR}/native-checks"
+          --ticks 1800 --repeats 2 --validate-traces)
+        set_tests_properties(native-local-ai PROPERTIES TIMEOUT ${OA_NATIVE_CHECK_TIMEOUT})
         add_test(NAME native-ai-benchmark COMMAND ${Python3_EXECUTABLE}
           "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_native_ai_benchmark.py"
           --native $<TARGET_FILE:oa-game> --game-dir "${OA_GAME_DIR}"
@@ -3408,6 +3414,8 @@ if(BUILD_TESTING)
     add_test(NAME training-client-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/check_training_client.py)
     set_tests_properties(training-client-selftest PROPERTIES TIMEOUT 120)
+    add_test(NAME local-ai-benchmark-selftest COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tools/benchmark_local_ai.py --self-test)
     add_test(NAME ai-benchmark-selftest COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/tools/benchmark_ai_matches.py --self-test)
     add_test(NAME rendering-benchmark-selftest COMMAND ${Python3_EXECUTABLE}

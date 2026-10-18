@@ -341,6 +341,9 @@ struct Options {
     bool simulation_only = false;
     /// Runs the synchronous local-player training protocol on standard input/output.
     bool training_worker = false;
+    /// Runs two local computer players without drawing or network pacing.
+    std::optional<std::size_t> local_ai_ticks;
+    std::string local_ai_map;            ///< selected map, or Ashap Plateau when installed
     std::string training_map;            ///< map name, or the first installed skirmish map
     std::size_t training_limit = 108000; ///< maximum simulation ticks in the episode
     // Headless campaign run: the campaign's name and the mission index that

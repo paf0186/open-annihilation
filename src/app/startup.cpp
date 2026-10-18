@@ -1038,6 +1038,17 @@ take_match_option(std::string_view argument, ArgumentCursor& cursor, Options& op
         options.match_ticks = parse_count(option_value(cursor));
         return true;
     }
+    if (argument == "--local-ai-benchmark") {
+        options.local_ai_ticks = parse_count(option_value(cursor));
+        options.headless_check = true;
+        options.skip_intro = true;
+        options.unattended = true;
+        return true;
+    }
+    if (argument == "--local-ai-map") {
+        options.local_ai_map = option_value(cursor);
+        return true;
+    }
     if (argument == "--training-worker") {
         options.training_worker = true;
         options.headless_check = true;
@@ -1459,6 +1470,7 @@ void write_startup_line(std::string_view text) {
                      "[--max-fps N] "
                      "[--hardware-acceleration[=off|basic|full] | --no-hardware-acceleration] "
                      "[--native-density] [--display-modes MODES] "
+                     "[--local-ai-benchmark TICKS [--local-ai-map NAME]] "
                      "[--training-worker [--training-map NAME] [--training-limit N]] [--benchmark "
                      "FRAMES] [--simulation-only] [--match-ticks N "
                      "[--frame-rate FPS [--frame-log FILE] [--scroll-camera] [--march] "
@@ -1559,6 +1571,21 @@ void write_startup_line(std::string_view text) {
     }
     if (result.campaign_mission.has_value() != !result.campaign.empty())
         throw std::runtime_error("--campaign and --mission are used together");
+    if (result.local_ai_ticks && *result.local_ai_ticks == 0)
+        throw std::runtime_error("--local-ai-benchmark ticks must be positive");
+    if (result.local_ai_ticks && !result.seed)
+        result.seed = 1;
+    if (result.local_ai_ticks &&
+        (result.training_worker || result.match_ticks || result.simulation_only ||
+         result.frame_rate || result.campaign_mission || !result.load_file.empty() ||
+         result.save_after || result.benchmark_frames || !result.generate_script.empty() ||
+         !result.render_script.empty() || !result.stage_file.empty() || result.combat_units ||
+         result.give_orders || result.reclaim_check || result.check_director_view ||
+         result.check_director_render || result.check_interpolation || result.check_unit_playout ||
+         result.check_zoom_memory))
+        throw std::runtime_error("--local-ai-benchmark cannot be combined with another run mode");
+    if (!result.local_ai_ticks && !result.local_ai_map.empty())
+        throw std::runtime_error("--local-ai-map needs --local-ai-benchmark");
     if (result.training_worker && result.training_limit == 0)
         throw std::runtime_error("--training-limit must be positive");
     if (result.training_worker && !result.seed)
@@ -1607,7 +1634,7 @@ void write_startup_line(std::string_view text) {
         throw std::runtime_error(
             "--frame-log, --scroll-camera, --march, --follow and --frame-clock need --frame-rate"
         );
-    if (result.training_worker)
+    if (result.training_worker || result.local_ai_ticks)
         note_game_switches(result);
     {
         // A launch file named without a folder is looked for in the game

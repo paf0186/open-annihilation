@@ -155,6 +155,22 @@ int main() {
         );
     }
 
+    for (const auto& run : std::vector<std::vector<const char*>>{
+             {"--play-demo", "game.tad"},
+             {"--net-ai-benchmark", "60"},
+             {"--net-loopback-check", "60"},
+             {"--net-record", "game.tad"},
+             {"--launch", "-"},
+         }) {
+        std::vector<const char*> arguments{"--local-ai-benchmark", "60"};
+        arguments.insert(arguments.end(), run.begin(), run.end());
+        expect(
+            rejection(arguments) ==
+                "--local-ai-benchmark cannot be combined with network run modes",
+            "local AI refuses network run modes"
+        );
+    }
+
     const auto demo = parse({"--play-demo", "game.tad", "--trace-digest", "demo.trace"});
     expect(
         demo.net.play_demo == "game.tad" && demo.app.trace_digest == "demo.trace",

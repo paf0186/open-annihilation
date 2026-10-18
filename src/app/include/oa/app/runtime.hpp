@@ -1657,6 +1657,11 @@ class Runtime final : public menu::Host,
     /// @return zero after EOF or close; nonzero after an engine fault
     int run_training_worker();
 
+    /// Measures two existing local computer players in one unpaced match.
+    /// @param ticks maximum simulation ticks
+    /// @return zero for a completed run; nonzero for a setup or simulation fault
+    int run_local_ai_benchmark(std::size_t ticks);
+
     /// Runs the --campaign mission headless with the computer player active.
     ///
     /// Every distinct tick error is logged with the run's tick it first

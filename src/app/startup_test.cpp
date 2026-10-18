@@ -486,6 +486,8 @@ const std::vector<ValueCase>& value_cases() {
         {"--draw-threads", "2", {}},
         {"--match-ticks", "60", {}},
         {"--training-map", "Coast", {"--training-worker"}},
+        {"--local-ai-benchmark", "60", {}},
+        {"--local-ai-map", "Coast", {"--local-ai-benchmark", "60"}},
         {"--training-limit", "90", {"--training-worker"}},
         {"--campaign", "Arm Campaign", {"--mission", "0"}},
         {"--mission", "0", {"--campaign", "Arm Campaign"}},
@@ -1219,6 +1221,33 @@ int main() {
             !plain.busy_combat,
         "--busy-combat goes with --combat"
     );
+    const auto local_ai = parse({"--local-ai-benchmark", "60", "--local-ai-map", "Coast"});
+    expect(
+        local_ai.local_ai_ticks == 60 && local_ai.local_ai_map == "Coast" &&
+            local_ai.headless_check && local_ai.unattended && local_ai.skip_intro &&
+            local_ai.seed == 1,
+        "local AI benchmark has an explicit seeded headless setup"
+    );
+    expect(
+        rejection({"--local-ai-benchmark", "0"}) == "--local-ai-benchmark ticks must be positive",
+        "local AI benchmark refuses zero progress"
+    );
+    expect(
+        rejection({"--local-ai-map", "Coast"}) == "--local-ai-map needs --local-ai-benchmark",
+        "local AI map needs its benchmark"
+    );
+    for (const auto& arguments : std::vector<std::vector<const char*>>{
+             {"--local-ai-benchmark", "60", "--training-worker"},
+             {"--local-ai-benchmark", "60", "--match-ticks", "30"},
+             {"--local-ai-benchmark", "60", "--simulation-only"},
+             {"--local-ai-benchmark", "60", "--save-after", "30"},
+             {"--local-ai-benchmark", "60", "--benchmark", "1"},
+             {"--local-ai-benchmark", "60", "--combat", "4"},
+         })
+        expect(
+            rejection(arguments) == "--local-ai-benchmark cannot be combined with another run mode",
+            "local AI benchmark refuses a competing run"
+        );
     const auto worker =
         parse({"--training-worker", "--training-map", "Coast", "--training-limit", "90"});
     expect(
