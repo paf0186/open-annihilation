@@ -1222,6 +1222,43 @@ void state_import_rejects_invalid_context_before_mutation() {
     );
 }
 
+/// Keeps ignored opcode bits out of dispatch while retaining the required opcode family bit.
+void opcode_dispatch_preserves_ignored_bits() {
+    constexpr uint32_t ignored_opcode_bits = 0xeff00ff8U;
+    constexpr uint32_t opcode_family_bit = 0x10000000U;
+    auto machine = make_vm(
+        {
+            vm::opcode::push_constant | ignored_opcode_bits,
+            3,
+            vm::opcode::push_constant | ignored_opcode_bits,
+            4,
+            vm::opcode::add | ignored_opcode_bits,
+            vm::opcode::pop_static | ignored_opcode_bits,
+            0,
+            vm::opcode::return_ | ignored_opcode_bits,
+        },
+        {0},
+        1
+    );
+    require(machine.start(0).ok(), "decorated opcode script did not start");
+    const auto result = machine.tick(0);
+    require(
+        result.ok() && result.instructions == 5 && machine.static_value(0) == 7,
+        "ignored opcode bits changed dispatch, operands or instruction count"
+    );
+
+    const auto missing_family = vm::opcode::push_constant & ~opcode_family_bit;
+    auto unsupported = make_vm({missing_family, 9});
+    require(unsupported.start(0).ok(), "missing-family script did not start");
+    const auto fault = unsupported.tick_context(0, 0);
+    require(
+        fault.error && fault.error->code == vm::ErrorCode::unsupported_opcode &&
+            fault.error->opcode == missing_family && fault.instructions == 0 &&
+            unsupported.context(0).pc == 0 && unsupported.context(0).stack_pointer == -1,
+        "an opcode outside the family was dispatched or consumed operands"
+    );
+}
+
 void unsupported_is_side_effect_free_at_fault() {
     constexpr uint32_t unhandled_extension_opcode = 0x10039000U;
     auto machine = make_vm({
@@ -1451,6 +1488,7 @@ int main() {
         state_bridge_round_trip_and_continuation();
         state_restore_clears_return_callback();
         state_import_rejects_invalid_context_before_mutation();
+        opcode_dispatch_preserves_ignored_bits();
         unsupported_is_side_effect_free_at_fault();
         unsupported_stops_only_its_context();
         faults_do_not_consume_operands();

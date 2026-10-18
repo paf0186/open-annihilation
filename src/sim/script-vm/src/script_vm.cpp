@@ -11,6 +11,7 @@
 namespace oa::sim::script_vm {
 namespace {
 constexpr uint32_t opcode_dispatch_mask = 0x100ff000U;
+constexpr uint32_t opcode_dispatch_shift = 12;
 
 int32_t as_signed(uint32_t value) noexcept {
     return std::bit_cast<int32_t>(value);
@@ -309,7 +310,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             return context.slots[static_cast<std::size_t>(context.sp - depth)];
         };
 
-        if (op == opcode::ignored_piece_op) {
+        // The selector keeps the opcode family and operation, without the operand flags.
+        switch (op >> opcode_dispatch_shift) {
+        case opcode::ignored_piece_op >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "opcode 0x10009000 requires a Host");
             if (!need_words(2))
@@ -323,7 +326,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             context.sp -= 2;
             host_->ignored_piece_op(program_.code[pc + 1], first, second);
             context.pc += 2;
-        } else if (op == opcode::dont_shadow) {
+            break;
+        }
+        case opcode::dont_shadow >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "opcode 0x1000A000 requires a Host");
             if (!need_words(2))
@@ -332,7 +337,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
                 );
             host_->dont_shadow(program_.code[pc + 1]);
             context.pc += 2;
-        } else if (op == opcode::is_carrying_unit) {
+            break;
+        }
+        case opcode::is_carrying_unit >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "opcode 0x10044000 requires a Host");
             if (!need_stack(1))
@@ -342,7 +349,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             const auto output = host_->is_carrying_unit(input);
             context.slots[static_cast<std::size_t>(++context.sp)] = output;
             ++context.pc;
-        } else if (op == opcode::carrier_unit_id) {
+            break;
+        }
+        case opcode::carrier_unit_id >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "opcode 0x10045000 requires a Host");
             if (!has_push_room())
@@ -352,10 +361,14 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             const auto value = host_->carrier_unit_id();
             context.slots[static_cast<std::size_t>(++context.sp)] = value;
             ++context.pc;
-        } else if (
-            op == opcode::move || op == opcode::turn || op == opcode::spin ||
-            op == opcode::stop_spin || op == opcode::move_now || op == opcode::turn_now
-        ) {
+            break;
+        }
+        case opcode::move >> opcode_dispatch_shift:
+        case opcode::turn >> opcode_dispatch_shift:
+        case opcode::spin >> opcode_dispatch_shift:
+        case opcode::stop_spin >> opcode_dispatch_shift:
+        case opcode::move_now >> opcode_dispatch_shift:
+        case opcode::turn_now >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "piece transform opcode requires a Host");
             if (!need_words(3))
@@ -455,7 +468,10 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
                 host_->set_piece_angle(piece, axis, value);
             }
             context.pc += 3;
-        } else if (op == opcode::wait_turn || op == opcode::wait_move) {
+            break;
+        }
+        case opcode::wait_turn >> opcode_dispatch_shift:
+        case opcode::wait_move >> opcode_dispatch_shift: {
             if (!need_words(3))
                 return fail(ErrorCode::truncated_instruction, "WAIT lacks piece/axis operands");
             const auto piece = program_.code[pc + 1];
@@ -469,10 +485,14 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             context.pc += 3;
             context.state = op == opcode::wait_turn ? ContextState::waiting_for_turn
                                                     : ContextState::waiting_for_move;
-        } else if (
-            op == opcode::show || op == opcode::hide || op == opcode::cache ||
-            op == opcode::dont_cache || op == opcode::shade || op == opcode::dont_shade
-        ) {
+            break;
+        }
+        case opcode::show >> opcode_dispatch_shift:
+        case opcode::hide >> opcode_dispatch_shift:
+        case opcode::cache >> opcode_dispatch_shift:
+        case opcode::dont_cache >> opcode_dispatch_shift:
+        case opcode::shade >> opcode_dispatch_shift:
+        case opcode::dont_shade >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "piece flag opcode requires a Host");
             if (!need_words(2))
@@ -489,7 +509,10 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             else
                 host_->set_piece_shaded(piece, op == opcode::shade);
             context.pc += 2;
-        } else if (op == opcode::emit_sfx || op == opcode::explode) {
+            break;
+        }
+        case opcode::emit_sfx >> opcode_dispatch_shift:
+        case opcode::explode >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "piece effect opcode requires a Host");
             if (!need_words(2))
@@ -506,7 +529,10 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             else
                 host_->explode(piece, value);
             context.pc += 2;
-        } else if (op == opcode::get_unit_value || op == opcode::get) {
+            break;
+        }
+        case opcode::get_unit_value >> opcode_dispatch_shift:
+        case opcode::get >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "unit query opcode requires a Host");
             const int32_t argument_count = op == opcode::get_unit_value ? 1 : 5;
@@ -522,7 +548,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             );
             context.slots[static_cast<std::size_t>(++context.sp)] = as_unsigned(value);
             ++context.pc;
-        } else if (op == opcode::set_unit_value) {
+            break;
+        }
+        case opcode::set_unit_value >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "SET_VALUE requires a Host");
             if (!need_stack(2))
@@ -532,7 +560,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             context.sp -= 2;
             host_->set_unit_value(selector, value);
             ++context.pc;
-        } else if (op == opcode::attach_unit) {
+            break;
+        }
+        case opcode::attach_unit >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "ATTACH_UNIT requires a Host");
             if (!need_stack(3))
@@ -543,7 +573,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             context.sp -= 3;
             host_->attach_unit(first, second, third);
             ++context.pc;
-        } else if (op == opcode::drop_unit) {
+            break;
+        }
+        case opcode::drop_unit >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "DROP_UNIT requires a Host");
             if (!need_stack(1))
@@ -552,7 +584,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             --context.sp;
             host_->drop_unit(unit);
             ++context.pc;
-        } else if (op == 0x10021000U) {
+            break;
+        }
+        case opcode::push_constant >> opcode_dispatch_shift: {
             if (!need_words(2))
                 return fail(ErrorCode::truncated_instruction, "PUSH lacks its operand");
             if (!has_push_room())
@@ -575,12 +609,16 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             }
             context.slots[static_cast<std::size_t>(++context.sp)] = value;
             context.pc += 2;
-        } else if (op == opcode::stack_alloc) {
+            break;
+        }
+        case opcode::stack_alloc >> opcode_dispatch_shift: {
             if (!has_push_room())
                 return fail(ErrorCode::stack_overflow, "STACK_ALLOC exceeds 32 stack slots");
             ++context.sp;
             ++context.pc;
-        } else if (op == 0x10023000U) {
+            break;
+        }
+        case opcode::pop_local >> opcode_dispatch_shift: {
             if (!need_words(2))
                 return fail(ErrorCode::truncated_instruction, "POP lacks its destination");
             if (!need_stack(1))
@@ -603,17 +641,24 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
                 statics_[destination] = value;
             --context.sp;
             context.pc += 2;
-        } else if (op == opcode::pop_stack) {
+            break;
+        }
+        case opcode::pop_stack >> opcode_dispatch_shift: {
             if (!need_stack(1))
                 return fail(ErrorCode::stack_underflow, "POP_STACK requires one value");
             --context.sp;
             ++context.pc;
-        } else if (op == opcode::bit_not || op == opcode::logical_not) {
+            break;
+        }
+        case opcode::bit_not >> opcode_dispatch_shift:
+        case opcode::logical_not >> opcode_dispatch_shift: {
             if (!need_stack(1))
                 return fail(ErrorCode::stack_underflow, "unary operation requires one value");
             top() = op == opcode::bit_not ? ~top() : static_cast<uint32_t>(top() == 0);
             ++context.pc;
-        } else if (op == opcode::random) {
+            break;
+        }
+        case opcode::random >> opcode_dispatch_shift: {
             if (!host_)
                 return fail(ErrorCode::missing_host, "RANDOM requires shared Host RNG state");
             if (!need_stack(2))
@@ -625,14 +670,24 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             context.slots[static_cast<std::size_t>(++context.sp)] =
                 host_->random_bounded(bound) + lower;
             ++context.pc;
-        } else if (
-            op == opcode::add || op == opcode::subtract || op == opcode::multiply ||
-            op == opcode::divide || op == opcode::bit_and || op == opcode::bit_or ||
-            op == opcode::bit_xor || op == opcode::less || op == opcode::less_equal ||
-            op == opcode::greater || op == opcode::greater_equal || op == opcode::equal ||
-            op == opcode::not_equal || op == opcode::logical_and || op == opcode::logical_or ||
-            op == opcode::logical_xor
-        ) {
+            break;
+        }
+        case opcode::add >> opcode_dispatch_shift:
+        case opcode::subtract >> opcode_dispatch_shift:
+        case opcode::multiply >> opcode_dispatch_shift:
+        case opcode::divide >> opcode_dispatch_shift:
+        case opcode::bit_and >> opcode_dispatch_shift:
+        case opcode::bit_or >> opcode_dispatch_shift:
+        case opcode::bit_xor >> opcode_dispatch_shift:
+        case opcode::less >> opcode_dispatch_shift:
+        case opcode::less_equal >> opcode_dispatch_shift:
+        case opcode::greater >> opcode_dispatch_shift:
+        case opcode::greater_equal >> opcode_dispatch_shift:
+        case opcode::equal >> opcode_dispatch_shift:
+        case opcode::not_equal >> opcode_dispatch_shift:
+        case opcode::logical_and >> opcode_dispatch_shift:
+        case opcode::logical_or >> opcode_dispatch_shift:
+        case opcode::logical_xor >> opcode_dispatch_shift: {
             if (!need_stack(2))
                 return fail(ErrorCode::stack_underflow, "binary operation requires two values");
             const auto lhs = top(1);
@@ -675,7 +730,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             top(1) = result;
             --context.sp;
             ++context.pc;
-        } else if (op == opcode::sleep) {
+            break;
+        }
+        case opcode::sleep >> opcode_dispatch_shift: {
             if (!need_stack(1))
                 return fail(ErrorCode::stack_underflow, "SLEEP requires a duration");
             const auto product = as_unsigned(time_scale_) * top();
@@ -683,14 +740,18 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
             --context.sp;
             ++context.pc;
             context.state = ContextState::sleeping;
-        } else if (op == opcode::jump) {
+            break;
+        }
+        case opcode::jump >> opcode_dispatch_shift: {
             if (!need_words(2))
                 return fail(ErrorCode::truncated_instruction, "JUMP lacks its target");
             const auto target = program_.code[pc + 1];
             if (target >= program_.code.size())
                 return fail(ErrorCode::invalid_jump, "JUMP target is outside code");
             context.pc = target;
-        } else if (op == opcode::jump_if_false) {
+            break;
+        }
+        case opcode::jump_if_false >> opcode_dispatch_shift: {
             if (!need_words(2))
                 return fail(ErrorCode::truncated_instruction, "JUMP_IF_FALSE lacks its target");
             if (!need_stack(1))
@@ -701,7 +762,10 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
                 return fail(ErrorCode::invalid_jump, "taken JUMP_IF_FALSE target is outside code");
             --context.sp;
             context.pc = condition == 0 ? target : pc + 2;
-        } else if (op == opcode::start_script || op == opcode::call_script) {
+            break;
+        }
+        case opcode::start_script >> opcode_dispatch_shift:
+        case opcode::call_script >> opcode_dispatch_shift: {
             if (!need_words(3))
                 return fail(
                     ErrorCode::truncated_instruction, "script launch lacks index/count operands"
@@ -732,7 +796,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
                 context.state = ContextState::waiting_for_child;
                 context.child = child ? *child : no_child_context;
             }
-        } else if (op == opcode::discard_call) {
+            break;
+        }
+        case opcode::discard_call >> opcode_dispatch_shift: {
             if (!need_words(3))
                 return fail(
                     ErrorCode::truncated_instruction, "opcode 0x10063000 lacks inline operands"
@@ -749,7 +815,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
                 );
             context.sp -= static_cast<int32_t>(argument_count);
             context.pc += 3;
-        } else if (op == opcode::return_) {
+            break;
+        }
+        case opcode::return_ >> opcode_dispatch_shift: {
             if (context.return_callback) {
                 if (!need_stack(1))
                     return fail(ErrorCode::stack_underflow, "callback RETURN requires one value");
@@ -758,13 +826,17 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
                 context.return_callback(value);
             }
             stop_context(index);
-        } else if (op == opcode::set_signal_mask) {
+            break;
+        }
+        case opcode::set_signal_mask >> opcode_dispatch_shift: {
             if (!need_stack(1))
                 return fail(ErrorCode::stack_underflow, "SET_SIGNAL_MASK requires a mask");
             context.signal_mask = top();
             --context.sp;
             ++context.pc;
-        } else if (op == opcode::signal) {
+            break;
+        }
+        case opcode::signal >> opcode_dispatch_shift: {
             if (!need_stack(1))
                 return fail(ErrorCode::stack_underflow, "SIGNAL requires a mask");
             const auto signal_mask = top();
@@ -776,7 +848,9 @@ Vm::execute_context(std::size_t index, std::size_t& instructions, std::size_t in
                 }
             }
             ++context.pc;
-        } else {
+            break;
+        }
+        default:
             return fail(ErrorCode::unsupported_opcode, "opcode is outside the supported subset");
         }
         ++instructions;
