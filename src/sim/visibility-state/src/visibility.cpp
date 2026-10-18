@@ -224,15 +224,20 @@ void visit_standard_stamp(
         end_z = grid.height - center_z;
     const auto begin_x = center_x < 0 ? -center_x : 0;
     const auto begin_z = center_z < 0 ? -center_z : 0;
-    for (auto z = begin_z; z < end_z; ++z)
-        for (auto x = begin_x; x < end_x; ++x)
-            if (mask.pixels
-                    [static_cast<std::size_t>(z) * mask.width + static_cast<std::size_t>(x)] !=
-                mask.transparent)
-                visit(
-                    static_cast<std::size_t>(center_z + z) * static_cast<std::size_t>(grid.width) +
-                    static_cast<std::size_t>(center_x + x)
-                );
+    if (begin_x >= end_x)
+        return;
+    const auto mask_width = static_cast<std::size_t>(mask.width);
+    const auto grid_width = static_cast<std::size_t>(grid.width);
+    const auto* pixels = mask.pixels.data();
+    const auto transparent = mask.transparent;
+    for (auto z = begin_z; z < end_z; ++z) {
+        const auto* row = pixels + static_cast<std::size_t>(z) * mask_width;
+        auto cell = static_cast<std::size_t>(center_z + z) * grid_width +
+                    static_cast<std::size_t>(center_x + begin_x);
+        for (auto x = begin_x; x < end_x; ++x, ++cell)
+            if (row[static_cast<std::size_t>(x)] != transparent)
+                visit(cell);
+    }
 }
 
 bool inside_altitude_grid(int32_t x, int32_t z, const AltitudeSightData& altitude) noexcept {
