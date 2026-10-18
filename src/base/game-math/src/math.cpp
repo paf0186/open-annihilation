@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "oa/base/game_math.hpp"
+#include "oa/base/game_math/experimental.hpp"
 
 #include <array>
 #include <bit>
@@ -11,6 +12,8 @@
 
 namespace oa::base::game_math {
 namespace {
+bool experimental_math_enabled_value = false;
+
 // The exact binary64 constants 3.1c uses; do not replace them with ones
 // derived from a different pi.
 constexpr double radians_to_heading = 10430.37835047;
@@ -59,8 +62,13 @@ struct AngleWordTable {
 };
 
 // Built once, on first use; the values never change afterwards.
-SineCosine angle_word_sine_cosine(int16_t angle) noexcept {
+const AngleWordTable& angle_word_table() noexcept {
     static const AngleWordTable table;
+    return table;
+}
+
+SineCosine angle_word_sine_cosine(int16_t angle) noexcept {
+    const auto& table = angle_word_table();
     const bool negative = angle < 0;
     const auto word = static_cast<std::size_t>(negative ? -int32_t{angle} : int32_t{angle});
     return {
@@ -70,7 +78,46 @@ SineCosine angle_word_sine_cosine(int16_t angle) noexcept {
          table.cosine_negative[word] != 0}
     };
 }
+
+struct Binary64AngleWordTable {
+    std::array<double, angle_word_entries> sine{};
+    std::array<double, angle_word_entries> cosine{};
+
+    Binary64AngleWordTable() noexcept {
+        const auto& table = angle_word_table();
+        for (std::size_t word = 0; word < angle_word_entries; ++word) {
+            sine[word] =
+                to_double({table.sine_significand[word], table.sine_exponent[word], false});
+            cosine[word] = to_double(
+                {table.cosine_significand[word],
+                 table.cosine_exponent[word],
+                 table.cosine_negative[word] != 0}
+            );
+        }
+    }
+};
+
+RotatedPair binary64_rotate_pair(int32_t first, int32_t second, int16_t angle) noexcept {
+    static const Binary64AngleWordTable table;
+    const bool negative = angle < 0;
+    const auto word = static_cast<std::size_t>(negative ? -int32_t{angle} : int32_t{angle});
+    const double sine = negative ? -table.sine[word] : table.sine[word];
+    const double cosine = table.cosine[word];
+    const double cosine_first = rounded(cosine * static_cast<double>(first));
+    const double sine_second = rounded(sine * static_cast<double>(second));
+    const double sine_first = rounded(sine * static_cast<double>(first));
+    const double cosine_second = rounded(cosine * static_cast<double>(second));
+    return {rounded(cosine_first - sine_second), rounded(sine_first + cosine_second)};
+}
 } // namespace
+
+void set_experimental_math(bool enabled) noexcept {
+    experimental_math_enabled_value = enabled;
+}
+
+bool experimental_math_enabled() noexcept {
+    return experimental_math_enabled_value;
+}
 
 uint32_t random_bounded(uint32_t& state, uint32_t bound) noexcept {
     if (std::bit_cast<int32_t>(bound) < 2)
@@ -125,6 +172,8 @@ double square_root(double value) noexcept {
 }
 
 RotatedPair rotate_pair(int32_t first, int32_t second, int16_t angle) noexcept {
+    if (experimental_math_enabled_value)
+        return binary64_rotate_pair(first, second, angle);
     const SineCosine angle_values = angle_word_sine_cosine(angle);
     const Extended sine_value = angle_values.sine, cosine_value = angle_values.cosine;
     const auto product = [](Extended factor, int32_t coordinate) {

@@ -2,12 +2,100 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "oa/base/game_math.hpp"
+#include "oa/base/game_math/experimental.hpp"
+#include <array>
+#include <bit>
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <vector>
 
 namespace {
+
+void experimental_rotations() {
+    namespace gm = oa::base::game_math;
+    constexpr std::array<std::array<int32_t, 2>, 12> coordinates{
+        {{0, 0},
+         {0, 1},
+         {1, 0},
+         {1, 1},
+         {-1, 1},
+         {13, 7},
+         {32767, 32768},
+         {65535, 65536},
+         {INT32_MAX, INT32_MAX},
+         {INT32_MIN, INT32_MAX},
+         {INT32_MIN, INT32_MIN},
+         {INT32_MAX, 0}}
+    };
+    constexpr std::size_t angles = 65536;
+    using Results = std::array<gm::RotatedPair, coordinates.size()>;
+    std::vector<Results> baseline(angles);
+    const auto same = [](gm::RotatedPair a, gm::RotatedPair b) {
+        return std::bit_cast<uint64_t>(a.first) == std::bit_cast<uint64_t>(b.first) &&
+               std::bit_cast<uint64_t>(a.second) == std::bit_cast<uint64_t>(b.second);
+    };
+    if (gm::experimental_math_enabled())
+        throw std::runtime_error("experimental rotations must default to disabled");
+    for (std::size_t word = 0; word < angles; ++word) {
+        const int16_t angle = std::bit_cast<int16_t>(static_cast<uint16_t>(word));
+        for (std::size_t i = 0; i < coordinates.size(); ++i)
+            baseline[word][i] = gm::rotate_pair(coordinates[i][0], coordinates[i][1], angle);
+    }
+    gm::set_experimental_math(true);
+    if (!gm::experimental_math_enabled())
+        throw std::runtime_error("experimental rotations were not enabled");
+    double maximum_error = 0.0;
+    uint64_t changed = 0, changed_truncations = 0, changed_zero_signs = 0;
+    for (std::size_t word = 0; word < angles; ++word) {
+        const int16_t angle = std::bit_cast<int16_t>(static_cast<uint16_t>(word));
+        for (std::size_t i = 0; i < coordinates.size(); ++i) {
+            const int32_t first = coordinates[i][0], second = coordinates[i][1];
+            const auto actual = gm::rotate_pair(first, second, angle);
+            if (!same(actual, gm::rotate_pair(first, second, angle)))
+                throw std::runtime_error("experimental rotations do not repeat exactly");
+            const std::array<double, 2> output{actual.first, actual.second};
+            const std::array<double, 2> expected{baseline[word][i].first, baseline[word][i].second};
+            for (std::size_t j = 0; j < output.size(); ++j) {
+                const double error = std::fabs(output[j] - expected[j]);
+                // A binary64 coefficient changes by at most 2^-53. With
+                // signed 32-bit coordinates, separately rounded products
+                // and sums keep the absolute error below this bound.
+                if (!std::isfinite(output[j]) || error > 0x1p-18)
+                    throw std::runtime_error("experimental rotation exceeds its error bound");
+                if (error > maximum_error)
+                    maximum_error = error;
+                changed +=
+                    std::bit_cast<uint64_t>(output[j]) != std::bit_cast<uint64_t>(expected[j]);
+                changed_truncations += std::trunc(output[j]) != std::trunc(expected[j]);
+                changed_zero_signs += output[j] == 0.0 && expected[j] == 0.0 &&
+                                      std::signbit(output[j]) != std::signbit(expected[j]);
+            }
+        }
+    }
+    gm::set_experimental_math(false);
+    if (gm::experimental_math_enabled())
+        throw std::runtime_error("experimental rotations were not disabled");
+    for (std::size_t word = 0; word < angles; ++word) {
+        const int16_t angle = std::bit_cast<int16_t>(static_cast<uint16_t>(word));
+        for (std::size_t i = 0; i < coordinates.size(); ++i)
+            if (!same(
+                    baseline[word][i], gm::rotate_pair(coordinates[i][0], coordinates[i][1], angle)
+                ))
+                throw std::runtime_error("disabling experimental rotations changed normal results");
+    }
+    std::printf(
+        "experimental rotations: %llu changed components, %llu changed truncations, "
+        "%llu changed zero signs, maximum absolute error %.17g\n",
+        static_cast<unsigned long long>(changed),
+        static_cast<unsigned long long>(changed_truncations),
+        static_cast<unsigned long long>(changed_zero_signs),
+        maximum_error
+    );
+}
 
 /// Checks truncate_to_int64 and truncate_low32 at zero, the halves, the
 /// 32-bit, 32-bit-plus-one and 64-bit edges, and NaN and the infinities.
@@ -50,6 +138,7 @@ void truncation() {
 
 int main() {
     truncation();
+    experimental_rotations();
     uint32_t rng_state = 1;
     if (oa::base::game_math::random_bounded(rng_state, 100) != 7 || rng_state != 16807)
         throw std::runtime_error("random first state and draw");
