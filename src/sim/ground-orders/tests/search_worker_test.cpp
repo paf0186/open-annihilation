@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "oa/sim/ground_orders/search_worker.hpp"
+#include "oa/sim/ground_orders/experimental.hpp"
 #include "oa/data/limits.hpp"
 
 #include <bit>
@@ -309,9 +310,77 @@ void check_expansion_states() {
     // Pins expansion order, scores, runs and published routes.
     CHECK(digest.value == 0x3127e73ac71dbfc8ull);
 }
+
+/// Checks that stronger priority preserves goal acceptance and switches off fully.
+void check_weighted_priority_switch() {
+    OpenSampler sampler;
+    MovementMap map(16, 16, 1, 1, sampler);
+    fill(map);
+    oa::sim::unit_spawn::LegacyWorld world(2);
+    auto& unit = world.unit(1);
+    place(unit, 1, 1);
+    Navigation navigation;
+    Goal goal;
+    goal.cell = {12, 12};
+    SearchBegin begin;
+    SearchWorker compatible;
+    CHECK(experimental_pathfinder() == ExperimentalPathfinder::compatible);
+    CHECK(
+        compatible.begin(make_record(unit, navigation, goal, map), begin, all_seen) ==
+        SearchAdvance::in_progress
+    );
+    SearchStateDigest initial;
+    initial.add(compatible);
+    set_experimental_pathfinder(ExperimentalPathfinder::weighted);
+    CHECK(experimental_pathfinder() == ExperimentalPathfinder::weighted);
+    SearchWorker weighted;
+    CHECK(
+        weighted.begin(make_record(unit, navigation, goal, map), begin, all_seen) ==
+        SearchAdvance::in_progress
+    );
+    CHECK(weighted.threshold() == compatible.threshold());
+    for (uint32_t z = 0; z < map.height(); ++z) {
+        for (uint32_t x = 0; x < map.width(); ++x) {
+            CHECK(weighted.cell(x, z).flags == compatible.cell(x, z).flags);
+            CHECK(weighted.heuristic(x, z) == compatible.heuristic(x, z));
+        }
+    }
+    const auto start_handle = weighted.cell(1, 1).handle;
+    CHECK(
+        std::bit_cast<int32_t>(weighted.heap().payload(start_handle)[2]) ==
+        24 * goal_cost(goal, 1, 1)
+    );
+    auto result = SearchAdvance::in_progress;
+    for (int slice = 0; slice < 32 && result == SearchAdvance::in_progress; ++slice)
+        result = weighted.advance_slice();
+    CHECK(result == SearchAdvance::succeeded);
+    CHECK(!weighted.route().empty());
+    for (uint32_t z = 0; z < map.height(); ++z) {
+        for (uint32_t x = 0; x < map.width(); ++x) {
+            const auto cell = weighted.cell(x, z);
+            if ((cell.flags & 3u) == static_cast<uint8_t>(SearchCellVisit::open)) {
+                CHECK(
+                    ((cell.flags & search_goal_bit) != 0) ==
+                    (weighted.heuristic(x, z) <= weighted.threshold())
+                );
+            }
+        }
+    }
+    set_experimental_pathfinder(ExperimentalPathfinder::compatible);
+    SearchWorker restored;
+    CHECK(
+        restored.begin(make_record(unit, navigation, goal, map), begin, all_seen) ==
+        SearchAdvance::in_progress
+    );
+    SearchStateDigest restored_state;
+    restored_state.add(restored);
+    CHECK(initial.value == restored_state.value);
+}
 } // namespace
 
 int main() {
+    check_expansion_states();
+    check_weighted_priority_switch();
     check_expansion_states();
     SearchCellGrid grid;
     grid.allocate(1, 1);

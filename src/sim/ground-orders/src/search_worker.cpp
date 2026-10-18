@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 #include "oa/sim/ground_orders/search_worker.hpp"
+#include "oa/sim/ground_orders/experimental.hpp"
 #include "oa/sim/ground_orders/search_trace.hpp"
 
 #include <bit>
@@ -9,6 +10,14 @@
 
 namespace oa::sim::ground_orders {
 namespace {
+
+constexpr int32_t experimental_priority_scale = 24 << 16;
+ExperimentalPathfinder pathfinder_mode = ExperimentalPathfinder::compatible;
+
+/// Scales a goal cost, dropping the low sixteen product bits.
+int32_t scaled_goal_cost(int32_t cost, int32_t scale) noexcept {
+    return static_cast<int32_t>((int64_t(cost) * int64_t(scale)) >> 16);
+}
 
 int32_t wrap_neg(int32_t value) noexcept {
     return static_cast<int32_t>(0u - static_cast<uint32_t>(value));
@@ -102,6 +111,14 @@ void clear_dirty_cells(std::span<SearchMapCell> cells, std::span<uint32_t> dirty
 }
 
 } // namespace
+
+void set_experimental_pathfinder(ExperimentalPathfinder mode) noexcept {
+    pathfinder_mode = mode;
+}
+
+ExperimentalPathfinder experimental_pathfinder() noexcept {
+    return pathfinder_mode;
+}
 
 void SearchCellGrid::allocate(int32_t map_width, int32_t map_height) {
     width = map_width;
@@ -282,8 +299,7 @@ uint32_t SearchWorker::classify(int32_t x, int32_t z) const {
 
 int32_t SearchWorker::heuristic(int32_t x, int32_t z) const {
     const auto cost = goal_cost(*record_.goal, x, z);
-    const auto product = int64_t(cost) * int64_t(heuristic_scale_);
-    return static_cast<int32_t>(product >> 16);
+    return scaled_goal_cost(cost, heuristic_scale_);
 }
 
 uint32_t SearchWorker::expand_best() {
@@ -304,6 +320,7 @@ uint32_t SearchWorker::expand_best() {
     const auto straight_run = static_cast<int16_t>(parent_run + 1);
     const auto early_turn_penalty =
         parent_run < search_early_run_limit ? search_early_turn_penalty : 0;
+    const auto weighted_priority = pathfinder_mode == ExperimentalPathfinder::weighted;
     auto expand_neighbor = [&](uint32_t relative_turn) {
         const auto direction = (static_cast<uint32_t>(cell.predecessor) + relative_turn) & 7u;
         const auto x = parent_x + search_direction_x[direction];
@@ -322,7 +339,8 @@ uint32_t SearchWorker::expand_best() {
                 cell.flags = static_cast<uint8_t>(cell.flags | 3u);
                 return;
             }
-            const auto estimate = heuristic(x, z);
+            const auto cost = goal_cost(*record_.goal, x, z);
+            const auto estimate = scaled_goal_cost(cost, heuristic_scale_);
             if (estimate > threshold_)
                 cell.flags = static_cast<uint8_t>(cell.flags | 1u);
             else
@@ -336,7 +354,9 @@ uint32_t SearchWorker::expand_best() {
             const auto run = relative_turn == 0 ? straight_run : int16_t{1};
             if (relative_turn != 0)
                 g += early_turn_penalty;
-            const auto f = g + estimate;
+            const auto priority =
+                weighted_priority ? scaled_goal_cost(cost, experimental_priority_scale) : estimate;
+            const auto f = g + priority;
             const auto handle = heap_.insert(
                 pack_node(static_cast<int16_t>(x), static_cast<int16_t>(z), g, f, extra, run)
             );
@@ -600,8 +620,14 @@ SearchAdvance SearchWorker::begin(
     start_cell.predecessor = heading_direction(unit.heading);
     // The start node's extra (payload word 3) is zero; it is never read, because
     // the start cell is closed on first pop and closed cells are not reopened.
+    const auto start_priority =
+        pathfinder_mode == ExperimentalPathfinder::weighted
+            ? scaled_goal_cost(
+                  goal_cost(*record_.goal, start_[0], start_[1]), experimental_priority_scale
+              )
+            : start_cost;
     const auto handle =
-        heap_.insert(pack_node(start_[0], start_[1], 0, start_cost, 0, search_start_run));
+        heap_.insert(pack_node(start_[0], start_[1], 0, start_priority, 0, search_start_run));
     start_cell.handle = handle;
     fan_ = search_initial_fan;
     return SearchAdvance::in_progress;
