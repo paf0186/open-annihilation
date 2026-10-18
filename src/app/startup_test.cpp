@@ -1235,6 +1235,11 @@ int main() {
         experiments.experimental_math && experiments.experimental_pathfinder == "weighted",
         "offline simulation experiments are explicit"
     );
+    expect(
+        parse({"--local-ai-benchmark", "60", "--experimental-pathfinder", "greedy"})
+                .experimental_pathfinder == "greedy",
+        "aggressive path priority is a separate experiment"
+    );
     const auto compatible =
         parse({"--experimental-math", "off", "--experimental-pathfinder", "compatible"});
     expect(
@@ -1248,7 +1253,7 @@ int main() {
     );
     expect(
         rejection({"--experimental-pathfinder", "quick"}) ==
-            "--experimental-pathfinder expects compatible or weighted",
+            "--experimental-pathfinder expects compatible, weighted or greedy",
         "unknown path experiment is refused"
     );
     for (const auto& arguments : std::vector<std::vector<const char*>>{

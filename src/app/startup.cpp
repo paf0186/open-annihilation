@@ -1047,8 +1047,10 @@ take_match_option(std::string_view argument, ArgumentCursor& cursor, Options& op
     }
     if (argument == "--experimental-pathfinder") {
         const auto value = option_value(cursor);
-        if (value != "compatible" && value != "weighted")
-            throw std::runtime_error("--experimental-pathfinder expects compatible or weighted");
+        if (value != "compatible" && value != "weighted" && value != "greedy")
+            throw std::runtime_error(
+                "--experimental-pathfinder expects compatible, weighted or greedy"
+            );
         options.experimental_pathfinder = value;
         return true;
     }
@@ -1485,7 +1487,7 @@ void write_startup_line(std::string_view text) {
                      "[--hardware-acceleration[=off|basic|full] | --no-hardware-acceleration] "
                      "[--native-density] [--display-modes MODES] "
                      "[--experimental-math off|hardware] "
-                     "[--experimental-pathfinder compatible|weighted] "
+                     "[--experimental-pathfinder compatible|weighted|greedy] "
                      "[--local-ai-benchmark TICKS [--local-ai-map NAME]] "
                      "[--training-worker [--training-map NAME] [--training-limit N]] [--benchmark "
                      "FRAMES] [--simulation-only] [--match-ticks N "

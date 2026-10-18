@@ -2262,6 +2262,8 @@ int main(int argc, char** argv) {
         oa::sim::ground_orders::set_experimental_pathfinder(
             parsed.experimental_pathfinder == "weighted"
                 ? oa::sim::ground_orders::ExperimentalPathfinder::weighted
+            : parsed.experimental_pathfinder == "greedy"
+                ? oa::sim::ground_orders::ExperimentalPathfinder::greedy
                 : oa::sim::ground_orders::ExperimentalPathfinder::compatible
         );
         if (parsed.experimental_math || parsed.experimental_pathfinder != "compatible")
