@@ -3,9 +3,11 @@
 
 #include "oa/base/game_math.hpp"
 #include "oa/base/game_math/experimental.hpp"
+#include "../src/rotation.hpp"
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cfenv>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
@@ -13,7 +15,99 @@
 #include <stdexcept>
 #include <vector>
 
+#if defined(__SSE__) || defined(_M_X64)
+#include <xmmintrin.h>
+#endif
+
 namespace {
+
+/// Checks native rotations against integer products under every rounding mode.
+void exact_native_rotations() {
+    namespace gm = oa::base::game_math;
+    std::fenv_t saved;
+    if (std::fegetenv(&saved) != 0)
+        throw std::runtime_error("cannot save floating-point environment");
+    const bool available = gm::detail::native_rotation_available();
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(_MSC_VER) && defined(__x86_64__)
+    if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("fma") && !available)
+        throw std::runtime_error("native rotation table is outside its supported range");
+#endif
+    constexpr std::array<std::array<int32_t, 2>, 8> coordinates{
+        {{0, 0},
+         {0, 1},
+         {1, 0},
+         {1, 1},
+         {-1, 1},
+         {13, 7},
+         {INT32_MAX, INT32_MIN},
+         {INT32_MIN, INT32_MIN}}
+    };
+    const auto check = [](int32_t first, int32_t second, int16_t angle, int seed_flags) {
+        std::feclearexcept(FE_ALL_EXCEPT);
+        std::feraiseexcept(seed_flags);
+        const auto expected = gm::detail::integer_rotate_pair(first, second, angle);
+        const int expected_flags = std::fetestexcept(FE_ALL_EXCEPT);
+        std::feclearexcept(FE_ALL_EXCEPT);
+        std::feraiseexcept(seed_flags);
+        const auto actual = gm::rotate_pair(first, second, angle);
+        const int actual_flags = std::fetestexcept(FE_ALL_EXCEPT);
+        if (std::bit_cast<uint64_t>(expected.first) != std::bit_cast<uint64_t>(actual.first) ||
+            std::bit_cast<uint64_t>(expected.second) != std::bit_cast<uint64_t>(actual.second) ||
+            expected_flags != actual_flags)
+            throw std::runtime_error("native rotation changed result bits or exception flags");
+    };
+    for (const int mode : {FE_TONEAREST, FE_DOWNWARD, FE_UPWARD, FE_TOWARDZERO}) {
+        if (std::fesetround(mode) != 0)
+            throw std::runtime_error("cannot set floating-point rounding mode");
+        for (uint32_t word = 0; word < 65536; ++word) {
+            const auto angle = std::bit_cast<int16_t>(static_cast<uint16_t>(word));
+            for (const auto& pair : coordinates)
+                for (const int flags : {0, FE_INEXACT})
+                    check(pair[0], pair[1], angle, flags);
+        }
+    }
+#if defined(__SSE__) || defined(_M_X64)
+    // The vector unit may have a different rounding mode from the unit the
+    // C environment reports. Compare its full settings and flags directly.
+    std::fesetround(FE_TONEAREST);
+    const auto vector_control = _mm_getcsr();
+    for (const unsigned mode :
+         {_MM_ROUND_NEAREST, _MM_ROUND_DOWN, _MM_ROUND_UP, _MM_ROUND_TOWARD_ZERO}) {
+        for (uint32_t word = 0; word < 65536; word += 17) {
+            const auto angle = std::bit_cast<int16_t>(static_cast<uint16_t>(word));
+            const auto control = (vector_control & ~(_MM_ROUND_MASK | _MM_EXCEPT_MASK)) | mode;
+            _mm_setcsr(control);
+            const auto expected = gm::detail::integer_rotate_pair(INT32_MIN, INT32_MAX, angle);
+            const auto expected_control = _mm_getcsr();
+            _mm_setcsr(control);
+            const auto actual = gm::rotate_pair(INT32_MIN, INT32_MAX, angle);
+            if (std::bit_cast<uint64_t>(expected.first) != std::bit_cast<uint64_t>(actual.first) ||
+                std::bit_cast<uint64_t>(expected.second) !=
+                    std::bit_cast<uint64_t>(actual.second) ||
+                expected_control != _mm_getcsr())
+                throw std::runtime_error(
+                    "native rotation changed independent vector rounding or flags"
+                );
+        }
+    }
+    // Unit-axis rotations have exact final sums. Inexact products must not
+    // raise a flag or trap when the caller unmasks that exception.
+    for (const int16_t angle : {int16_t{1}, int16_t{8191}, int16_t{16385}, int16_t{-32768}}) {
+        _mm_setcsr(vector_control & ~(_MM_EXCEPT_MASK | _MM_MASK_INEXACT));
+        const auto expected = gm::detail::integer_rotate_pair(1, 0, angle);
+        const auto expected_control = _mm_getcsr();
+        _mm_setcsr(vector_control & ~(_MM_EXCEPT_MASK | _MM_MASK_INEXACT));
+        const auto actual = gm::rotate_pair(1, 0, angle);
+        if (std::bit_cast<uint64_t>(expected.first) != std::bit_cast<uint64_t>(actual.first) ||
+            std::bit_cast<uint64_t>(expected.second) != std::bit_cast<uint64_t>(actual.second) ||
+            expected_control != _mm_getcsr())
+            throw std::runtime_error("native product raised an inexact exception");
+    }
+    _mm_setcsr(vector_control);
+#endif
+    std::fesetenv(&saved);
+    std::printf("exact native rotations: %s\n", available ? "enabled" : "integer fallback");
+}
 
 void experimental_rotations() {
     namespace gm = oa::base::game_math;
@@ -139,6 +233,7 @@ void truncation() {
 int main() {
     truncation();
     experimental_rotations();
+    exact_native_rotations();
     uint32_t rng_state = 1;
     if (oa::base::game_math::random_bounded(rng_state, 100) != 7 || rng_state != 16807)
         throw std::runtime_error("random first state and draw");

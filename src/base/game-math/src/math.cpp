@@ -4,12 +4,18 @@
 #include "oa/base/game_math.hpp"
 #include "oa/base/game_math/experimental.hpp"
 #include "integer_product.hpp"
+#include "rotation.hpp"
 
 #include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+
+#if (defined(__GNUC__) || defined(__clang__)) && !defined(_MSC_VER) && defined(__x86_64__)
+#include <immintrin.h>
+#define OA_NATIVE_EXACT_ROTATION 1
+#endif
 
 namespace oa::base::game_math {
 namespace {
@@ -119,6 +125,124 @@ RotatedPair binary64_rotate_pair(int32_t first, int32_t second, int16_t angle) n
     const double cosine_second = rounded(cosine * static_cast<double>(second));
     return {rounded(cosine_first - sine_second), rounded(sine_first + cosine_second)};
 }
+
+#if defined(OA_NATIVE_EXACT_ROTATION)
+struct SplitCoefficient {
+    double high{};
+    double low{};
+};
+
+struct SplitAngle {
+    SplitCoefficient sine{};
+    SplitCoefficient cosine{};
+};
+
+struct SplitAngleWordTable {
+    std::array<SplitAngle, angle_word_entries> values{};
+    bool supported = true;
+
+    /// Splits every exact coefficient into two exactly representable doubles.
+    SplitAngleWordTable() noexcept {
+        const auto& table = angle_word_table();
+        for (std::size_t word = 0; word < angle_word_entries; ++word) {
+            values[word].sine =
+                split(table.sine_significand[word], table.sine_exponent[word], false);
+            values[word].cosine = split(
+                table.cosine_significand[word],
+                table.cosine_exponent[word],
+                table.cosine_negative[word] != 0
+            );
+        }
+    }
+
+    /// Splits a coefficient, requiring both parts and their products to stay normal.
+    ///
+    /// @param significand normalized significand, or zero
+    /// @param exponent exponent of the leading bit
+    /// @param negative sign of the coefficient
+    /// @return exact high 53 bits and low 11 bits, including signed zeros
+    SplitCoefficient split(uint64_t significand, int32_t exponent, bool negative) noexcept {
+        constexpr uint64_t leading_bit = uint64_t{1} << 63;
+        constexpr uint64_t fraction_mask = 0xfffffffffffffULL;
+        const uint64_t sign = negative ? leading_bit : 0;
+        if (significand == 0)
+            return {std::bit_cast<double>(sign), std::bit_cast<double>(sign)};
+        if ((significand & leading_bit) == 0 || exponent < -959 || exponent > 0) {
+            supported = false;
+            return {};
+        }
+        const double high = std::bit_cast<double>(
+            sign | (static_cast<uint64_t>(exponent + 1023) << 52) |
+            ((significand >> 11) & fraction_mask)
+        );
+        const uint64_t low = significand & 0x7ff;
+        if (low == 0)
+            return {high, std::bit_cast<double>(sign)};
+        const unsigned top = 63 - static_cast<unsigned>(std::countl_zero(low));
+        const int32_t low_exponent = exponent - 63 + static_cast<int32_t>(top);
+        return {
+            high,
+            std::bit_cast<double>(
+                sign | (static_cast<uint64_t>(low_exponent + 1023) << 52) |
+                ((low << (52 - top)) & fraction_mask)
+            )
+        };
+    }
+};
+
+/// Returns an exact split table only on processors that support native rounding control.
+///
+/// @return the supported table, or null for the integer product path
+const SplitAngleWordTable* native_rotation_table() noexcept {
+    static const bool processor_supported =
+        __builtin_cpu_supports("avx512f") && __builtin_cpu_supports("fma");
+    if (!processor_supported)
+        return nullptr;
+    static const SplitAngleWordTable table;
+    return table.supported ? &table : nullptr;
+}
+
+/// Rotates with native products rounded to nearest without product exceptions.
+///
+/// Each coefficient is exactly high + low, with 53 and at most 11 bits.
+/// A low part times a 32-bit coordinate needs at most 43 significant bits,
+/// so that product is exact. Table bounds keep nonzero parts and products
+/// normal. Fusing high * coordinate + low_product rounds the original
+/// coefficient product once to 53 bits. Explicit nearest-even rounding
+/// without exceptions preserves the integer product's result and flags
+/// independently of the ambient mode. Final sums retain their usual rounding.
+///
+/// @param first first coordinate
+/// @param second second coordinate
+/// @param angle angle word, 65536 per turn
+/// @param table exact split coefficients with normal nonzero parts
+/// @return the same pair and floating-point flags as the integer product path
+__attribute__((target("avx512f,fma"))) RotatedPair native_rotate_pair(
+    int32_t first, int32_t second, int16_t angle, const SplitAngleWordTable& table
+) noexcept {
+    const bool negative = angle < 0;
+    const auto word = static_cast<std::size_t>(negative ? -int32_t{angle} : int32_t{angle});
+    const auto& entry = table.values[word];
+    const double sine_high = negative ? -entry.sine.high : entry.sine.high;
+    const double sine_low = negative ? -entry.sine.low : entry.sine.low;
+    const double x = static_cast<double>(first), y = static_cast<double>(second);
+    const __m128d first_value = _mm_set_sd(x), second_value = _mm_set_sd(y);
+    constexpr int rounding = _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC;
+    const double cosine_first = _mm_cvtsd_f64(_mm_fmadd_round_sd(
+        _mm_set_sd(entry.cosine.high), first_value, _mm_set_sd(entry.cosine.low * x), rounding
+    ));
+    const double sine_second = _mm_cvtsd_f64(
+        _mm_fmadd_round_sd(_mm_set_sd(sine_high), second_value, _mm_set_sd(sine_low * y), rounding)
+    );
+    const double sine_first = _mm_cvtsd_f64(
+        _mm_fmadd_round_sd(_mm_set_sd(sine_high), first_value, _mm_set_sd(sine_low * x), rounding)
+    );
+    const double cosine_second = _mm_cvtsd_f64(_mm_fmadd_round_sd(
+        _mm_set_sd(entry.cosine.high), second_value, _mm_set_sd(entry.cosine.low * y), rounding
+    ));
+    return {rounded(cosine_first - sine_second), rounded(sine_first + cosine_second)};
+}
+#endif
 } // namespace
 
 void set_experimental_math(bool enabled) noexcept {
@@ -181,9 +305,7 @@ double square_root(double value) noexcept {
     return std::sqrt(value);
 }
 
-RotatedPair rotate_pair(int32_t first, int32_t second, int16_t angle) noexcept {
-    if (experimental_math_enabled_value)
-        return binary64_rotate_pair(first, second, angle);
+RotatedPair detail::integer_rotate_pair(int32_t first, int32_t second, int16_t angle) noexcept {
     const SineCosine angle_values = angle_word_sine_cosine(angle);
     const Extended sine_value = angle_values.sine, cosine_value = angle_values.cosine;
     return {
@@ -196,6 +318,24 @@ RotatedPair rotate_pair(int32_t first, int32_t second, int16_t angle) noexcept {
             detail::integer_product(cosine_value, second)
         )
     };
+}
+
+bool detail::native_rotation_available() noexcept {
+#if defined(OA_NATIVE_EXACT_ROTATION)
+    return native_rotation_table() != nullptr;
+#else
+    return false;
+#endif
+}
+
+RotatedPair rotate_pair(int32_t first, int32_t second, int16_t angle) noexcept {
+    if (experimental_math_enabled_value)
+        return binary64_rotate_pair(first, second, angle);
+#if defined(OA_NATIVE_EXACT_ROTATION)
+    if (const auto* table = native_rotation_table())
+        return native_rotate_pair(first, second, angle, *table);
+#endif
+    return detail::integer_rotate_pair(first, second, angle);
 }
 
 double planar_length(int32_t x, int32_t z) noexcept {
